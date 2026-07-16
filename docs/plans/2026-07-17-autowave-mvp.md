@@ -58,9 +58,9 @@ Accelerate (vDSP), XcodeGen. Zero third-party dependencies.
 - Produces: compiling app; `RootView` navigation shell other tasks plug into.
 
 **Steps:**
-- [ ] Codex: implement scaffold per above; run `xcodegen generate`.
-- [ ] Claude: review diff; run build gate → BUILD SUCCEEDED; run test action → 1 test passes.
-- [ ] Claude: commit `feat: scaffold AutoWave Xcode project`.
+- [x] Codex: implement scaffold per above; run `xcodegen generate`.
+- [x] Claude: review diff; run build gate → BUILD SUCCEEDED; run test action → 1 test passes.
+- [x] Claude: commit `feat: scaffold AutoWave Xcode project`.
 
 ### Task 2: Core models + SwiftData store
 
