@@ -92,9 +92,9 @@ struct Beatmap: Codable, Sendable {
 - SwiftData: `TrackEntity` (title, sourceFilename, importedAt, audio file URL relative to Application Support), `BeatmapEntity` (difficulty raw, JSON-encoded `Beatmap` blob, relationship to track), `ScoreRecord` (track, difficulty, score, maxCombo, playedAt).
 
 **Steps:**
-- [ ] Codex: implement models + JSON round-trip tests (encode→decode == original) and a SwiftData in-memory container insert/fetch test.
-- [ ] Claude: review; build gate; tests pass. *(SwiftData `@Model` init pattern reviewed carefully — no optional-relationship pitfalls.)*
-- [ ] Claude: commit `feat: add core models and SwiftData entities`.
+- [x] Codex: implement models + JSON round-trip tests (encode→decode == original) and a SwiftData in-memory container insert/fetch test.
+- [x] Claude: review; build gate; tests pass. *(SwiftData `@Model` init pattern reviewed carefully — no optional-relationship pitfalls.)*
+- [x] Claude: commit `feat: add core models and SwiftData entities`.
 
 ### Task 3: Import + Library (local audio in, list out)
 
