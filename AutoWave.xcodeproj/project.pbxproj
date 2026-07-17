@@ -29,11 +29,13 @@
 		8BD1367540EEDE6E31A83AA3 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479C4135C9E7AB3F9874DB47 /* RootView.swift */; };
 		98609DE5D28DF6093289DED5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D13CB8183B74413834203CDE /* Assets.xcassets */; };
 		A6F6EDC8B5C80B704D21F08D /* AnalysisResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */; };
+		BCD2346A76B40E8A5C6FB56C /* AnalysisViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55E48455E8154910369247C /* AnalysisViewModel.swift */; };
 		D5CE7F53B5A64A5526C32D71 /* DifficultyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8E7DA53502C42F736E8BB2 /* DifficultyProfile.swift */; };
 		DA28903BFFA7CD540C17EFBB /* TempoEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01DCD591067C17F67DDD657 /* TempoEstimator.swift */; };
 		E35BBCC0CB507D17C48D4791 /* BeatmapGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5186CF25B7B76424064BF9 /* BeatmapGeneratorTests.swift */; };
 		E661925722BE8E1103EF363D /* SpectralAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE9868A791DD6F67C5AD54E /* SpectralAnalyzer.swift */; };
 		E66F167FD2E3EA34EBA98A55 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48179B827633382FE68672F0 /* SmokeTests.swift */; };
+		E6DEB623ECCEB33008584B3E /* AnalysisViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B4A1DC0CEDC3B08018D1031 /* AnalysisViewModelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +54,7 @@
 		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayContainerView.swift; sourceTree = "<group>"; };
 		22224A132309EC70DCAEFFCB /* OnsetDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnsetDetector.swift; sourceTree = "<group>"; };
+		2B4A1DC0CEDC3B08018D1031 /* AnalysisViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViewModelTests.swift; sourceTree = "<group>"; };
 		2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportServiceTests.swift; sourceTree = "<group>"; };
 		2EE9868A791DD6F67C5AD54E /* SpectralAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectralAnalyzer.swift; sourceTree = "<group>"; };
 		479C4135C9E7AB3F9874DB47 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -65,6 +68,7 @@
 		A01DCD591067C17F67DDD657 /* TempoEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempoEstimator.swift; sourceTree = "<group>"; };
 		A1D15A471F4F77E1DB616866 /* Beatmap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Beatmap.swift; sourceTree = "<group>"; };
 		A3FC0C485E13506255F9E5D2 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
+		A55E48455E8154910369247C /* AnalysisViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViewModel.swift; sourceTree = "<group>"; };
 		ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCodingTests.swift; sourceTree = "<group>"; };
 		AF5D751B151161690EDDFEA7 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
 		B838024FE85D54086054056C /* Difficulty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Difficulty.swift; sourceTree = "<group>"; };
@@ -110,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				C9AECF34B918B3699EABF5D3 /* AnalysisView.swift */,
+				A55E48455E8154910369247C /* AnalysisViewModel.swift */,
 			);
 			path = Analysis;
 			sourceTree = "<group>";
@@ -202,6 +207,7 @@
 		E1E04F496C3AD882E41B2EF8 /* AutoWaveTests */ = {
 			isa = PBXGroup;
 			children = (
+				2B4A1DC0CEDC3B08018D1031 /* AnalysisViewModelTests.swift */,
 				2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */,
 				5E5186CF25B7B76424064BF9 /* BeatmapGeneratorTests.swift */,
 				7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */,
@@ -306,6 +312,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6DEB623ECCEB33008584B3E /* AnalysisViewModelTests.swift in Sources */,
 				43A89C61B5371E8DF145E4F2 /* AudioImportServiceTests.swift in Sources */,
 				E35BBCC0CB507D17C48D4791 /* BeatmapGeneratorTests.swift in Sources */,
 				172A6F44EF074B2507A1DE2F /* BeatmapKitAnalysisTests.swift in Sources */,
@@ -320,6 +327,7 @@
 			files = (
 				A6F6EDC8B5C80B704D21F08D /* AnalysisResult.swift in Sources */,
 				74CA114E342806F12686B95E /* AnalysisView.swift in Sources */,
+				BCD2346A76B40E8A5C6FB56C /* AnalysisViewModel.swift in Sources */,
 				6DBB1DA40153D4511D06DF93 /* AudioDecoder.swift in Sources */,
 				5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */,
 				7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */,
