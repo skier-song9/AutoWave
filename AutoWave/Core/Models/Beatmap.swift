@@ -5,6 +5,7 @@ struct Beatmap: Codable, Sendable, Equatable {
     var palette: ThemePalette
     var generatorVersion: Int
     var themeID: String
+    var laneCount: Int
 
     init(
         difficulty: Difficulty,
@@ -12,7 +13,8 @@ struct Beatmap: Codable, Sendable, Equatable {
         notes: [Note],
         palette: ThemePalette,
         generatorVersion: Int,
-        themeID: String = GameTheme.defaultID
+        themeID: String = GameTheme.defaultID,
+        laneCount: Int = 4
     ) {
         self.difficulty = difficulty
         self.tempo = tempo
@@ -20,6 +22,7 @@ struct Beatmap: Codable, Sendable, Equatable {
         self.palette = palette
         self.generatorVersion = generatorVersion
         self.themeID = themeID
+        self.laneCount = laneCount
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -29,6 +32,7 @@ struct Beatmap: Codable, Sendable, Equatable {
         case palette
         case generatorVersion
         case themeID
+        case laneCount
     }
 
     init(from decoder: Decoder) throws {
@@ -40,6 +44,7 @@ struct Beatmap: Codable, Sendable, Equatable {
         generatorVersion = try container.decode(Int.self, forKey: .generatorVersion)
         themeID = try container.decodeIfPresent(String.self, forKey: .themeID)
             ?? GameTheme.defaultID
+        laneCount = try container.decodeIfPresent(Int.self, forKey: .laneCount) ?? 4
     }
 
     func encode(to encoder: Encoder) throws {
@@ -50,5 +55,6 @@ struct Beatmap: Codable, Sendable, Equatable {
         try container.encode(palette, forKey: .palette)
         try container.encode(generatorVersion, forKey: .generatorVersion)
         try container.encode(themeID, forKey: .themeID)
+        try container.encode(laneCount, forKey: .laneCount)
     }
 }

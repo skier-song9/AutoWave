@@ -20,7 +20,8 @@ final class ModelCodingTests: XCTestCase {
                 )
             ],
             palette: ThemePalette(hue: 0.5, saturation: 0.7, brightness: 0.65),
-            generatorVersion: 1
+            generatorVersion: 1,
+            laneCount: 6
         )
 
         let data = try JSONEncoder().encode(original)
@@ -47,6 +48,7 @@ final class ModelCodingTests: XCTestCase {
         let decoded = try JSONDecoder().decode(Beatmap.self, from: oldJSON)
 
         XCTAssertEqual(decoded.themeID, "deepSea")
+        XCTAssertEqual(decoded.laneCount, 4)
     }
 
     func testInMemoryModelContainerFetchesTrackAndBeatmap() throws {

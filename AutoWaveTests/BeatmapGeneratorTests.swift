@@ -4,16 +4,17 @@ import XCTest
 
 final class BeatmapGeneratorTests: XCTestCase {
     func testDifficultyProfilesMatchSpecification() {
-        let expected: [(Difficulty, Double, Double, Int, Double, Double, Double)] = [
-            (.heaven, 0.8, 85, 1, 0.10, 0.0, 250),
-            (.easy, 1.5, 65, 1, 0.15, 0.2, 320),
-            (.normal, 2.5, 45, 1, 0.20, 0.4, 400),
-            (.hard, 4.0, 25, 2, 0.25, 0.6, 500),
-            (.hell, 6.0, 10, 2, 0.30, 0.8, 620)
+        let expected: [(Difficulty, Int, Double, Double, Int, Double, Double, Double)] = [
+            (.heaven, 4, 1.2, 80, 1, 0.10, 0.0, 260),
+            (.easy, 4, 2.4, 60, 1, 0.15, 0.2, 330),
+            (.normal, 5, 4.0, 40, 2, 0.20, 0.4, 420),
+            (.hard, 6, 6.5, 20, 2, 0.25, 0.6, 520),
+            (.hell, 7, 9.5, 8, 2, 0.30, 0.8, 640)
         ]
 
-        for (difficulty, rate, percentile, simultaneous, drag, moving, scroll) in expected {
+        for (difficulty, laneCount, rate, percentile, simultaneous, drag, moving, scroll) in expected {
             let profile = DifficultyProfile.profile(for: difficulty)
+            XCTAssertEqual(profile.laneCount, laneCount)
             XCTAssertEqual(profile.maxNotesPerSecond, rate)
             XCTAssertEqual(profile.strengthPercentile, percentile)
             XCTAssertEqual(profile.maxSimultaneous, simultaneous)
@@ -63,10 +64,15 @@ final class BeatmapGeneratorTests: XCTestCase {
             let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: difficulty, seed: 42)
             XCTAssertEqual(beatmap.tempo, analysis.tempo)
             XCTAssertEqual(beatmap.generatorVersion, BeatmapGenerator.version)
+            XCTAssertEqual(beatmap.laneCount, DifficultyProfile.profile(for: difficulty).laneCount)
 
             for note in beatmap.notes {
                 XCTAssertGreaterThanOrEqual(note.lane, 0)
-                XCTAssertLessThanOrEqual(note.lane, 3)
+                XCTAssertLessThan(note.lane, Double(beatmap.laneCount))
+                for keyframe in note.lanePath {
+                    XCTAssertGreaterThanOrEqual(keyframe.lane, 0)
+                    XCTAssertLessThan(keyframe.lane, Double(beatmap.laneCount))
+                }
                 if note.kind == .drag {
                     XCTAssertGreaterThan(note.duration, 0)
                 }
@@ -171,7 +177,7 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
 
         XCTAssertEqual(beatmap.themeID, "neonRush")
-        XCTAssertEqual(beatmap.generatorVersion, 2)
+        XCTAssertEqual(beatmap.generatorVersion, 3)
         XCTAssertEqual(beatmap.palette, beatmapThemePalette(for: GameTheme.presets[1]))
     }
 
@@ -179,6 +185,86 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: makeBusyAnalysis(), difficulty: .hell, seed: 42)
 
         XCTAssertTrue(beatmap.notes.contains { $0.kind == .drag && !$0.lanePath.isEmpty })
+    }
+
+    func testHellHasChordsAndMoreNotesThanHardByMeaningfulRatio() {
+        let analysis = makeBusyAnalysis()
+        let hard = BeatmapGenerator.generate(from: analysis, difficulty: .hard, seed: 42)
+        let hell = BeatmapGenerator.generate(from: analysis, difficulty: .hell, seed: 42)
+        let grouped = Dictionary(grouping: hell.notes) { Int(($0.time * 1_000_000).rounded()) }
+
+        XCTAssertGreaterThan(Double(hell.notes.count), Double(hard.notes.count) * 1.15)
+        XCTAssertTrue(grouped.values.contains { $0.count == 2 })
+    }
+
+    func testSimultaneityCapIsAppliedPerDifficulty() {
+        let analysis = makeBusyAnalysis()
+
+        for difficulty in Difficulty.allCases {
+            let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: difficulty, seed: 42)
+            let grouped = Dictionary(grouping: beatmap.notes) { Int(($0.time * 1_000_000).rounded()) }
+            let cap = DifficultyProfile.profile(for: difficulty).maxSimultaneous
+
+            XCTAssertTrue(grouped.values.allSatisfy { $0.count <= cap }, "\(difficulty) exceeds \(cap)")
+        }
+    }
+
+    func testNotesSnapToDifficultyBeatGrid() {
+        let analysis = makeBusyAnalysis()
+        let beat = 60 / analysis.tempo
+
+        for difficulty in Difficulty.allCases {
+            let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: difficulty, seed: 42)
+            let subdivision = difficulty == .heaven || difficulty == .easy
+                ? beat / 2
+                : difficulty == .normal ? beat / 4 : beat / 8
+
+            for note in beatmap.notes {
+                let gridPosition = note.time / subdivision
+                XCTAssertEqual(gridPosition, gridPosition.rounded(), accuracy: 1e-7)
+            }
+        }
+    }
+
+    func testDragSpanExcludesTapsInActiveLaneRange() {
+        let beatmap = BeatmapGenerator.generate(from: makeBusyAnalysis(), difficulty: .hell, seed: 42)
+
+        for drag in beatmap.notes where drag.kind == .drag {
+            let dragLanes = [drag.lane] + drag.lanePath.map(\.lane)
+            let minimumLane = dragLanes.min()!
+            let maximumLane = dragLanes.max()!
+            let dragEnd = drag.time + drag.duration
+
+            for tap in beatmap.notes where tap.kind == .tap {
+                guard tap.time >= drag.time - 1e-9, tap.time <= dragEnd + 1e-9 else { continue }
+                XCTAssertTrue(
+                    tap.lane < minimumLane || tap.lane > maximumLane,
+                    "Tap \(tap) conflicts with drag \(drag)"
+                )
+            }
+        }
+    }
+
+    func testSpectralContentMapsLowToLeftAndHighToRight() {
+        let onsets = [
+            Onset(time: 0.5, strength: 1, bass: 1, mid: 0.1, treble: 0.05, centroid: 180),
+            Onset(time: 2.0, strength: 1, bass: 0.05, mid: 0.1, treble: 1, centroid: 8_000)
+        ]
+        let analysis = AnalysisResult(
+            duration: 3,
+            tempo: 120,
+            onsets: onsets,
+            meanBass: 0.5,
+            meanMid: 0.1,
+            meanTreble: 0.5,
+            meanRMS: 0.5
+        )
+
+        let notes = BeatmapGenerator.generate(from: analysis, difficulty: .easy, seed: 42).notes
+        let lowLane = notes.first { $0.time < 1 }!.lane
+        let highLane = notes.first { $0.time > 1 }!.lane
+
+        XCTAssertLessThan(lowLane, highLane)
     }
 
     func testOneSecondRateCapHoldsForEveryDifficulty() {

@@ -1,4 +1,5 @@
 struct DifficultyProfile: Sendable {
+    var laneCount: Int
     var maxNotesPerSecond: Double
     var strengthPercentile: Double
     var maxSimultaneous: Int
@@ -10,48 +11,53 @@ struct DifficultyProfile: Sendable {
         switch difficulty {
         case .heaven:
             DifficultyProfile(
-                maxNotesPerSecond: 0.8,
-                strengthPercentile: 85,
+                laneCount: 4,
+                maxNotesPerSecond: 1.2,
+                strengthPercentile: 80,
                 maxSimultaneous: 1,
                 dragRatio: 0.10,
                 movingDragRatio: 0.0,
-                scrollSpeed: 250
+                scrollSpeed: 260
             )
         case .easy:
             DifficultyProfile(
-                maxNotesPerSecond: 1.5,
-                strengthPercentile: 65,
+                laneCount: 4,
+                maxNotesPerSecond: 2.4,
+                strengthPercentile: 60,
                 maxSimultaneous: 1,
                 dragRatio: 0.15,
                 movingDragRatio: 0.2,
-                scrollSpeed: 320
+                scrollSpeed: 330
             )
         case .normal:
             DifficultyProfile(
-                maxNotesPerSecond: 2.5,
-                strengthPercentile: 45,
-                maxSimultaneous: 1,
+                laneCount: 5,
+                maxNotesPerSecond: 4.0,
+                strengthPercentile: 40,
+                maxSimultaneous: 2,
                 dragRatio: 0.20,
                 movingDragRatio: 0.4,
-                scrollSpeed: 400
+                scrollSpeed: 420
             )
         case .hard:
             DifficultyProfile(
-                maxNotesPerSecond: 4.0,
-                strengthPercentile: 25,
+                laneCount: 6,
+                maxNotesPerSecond: 6.5,
+                strengthPercentile: 20,
                 maxSimultaneous: 2,
                 dragRatio: 0.25,
                 movingDragRatio: 0.6,
-                scrollSpeed: 500
+                scrollSpeed: 520
             )
         case .hell:
             DifficultyProfile(
-                maxNotesPerSecond: 6.0,
-                strengthPercentile: 10,
+                laneCount: 7,
+                maxNotesPerSecond: 9.5,
+                strengthPercentile: 8,
                 maxSimultaneous: 2,
                 dragRatio: 0.30,
                 movingDragRatio: 0.8,
-                scrollSpeed: 620
+                scrollSpeed: 640
             )
         }
     }
