@@ -191,9 +191,9 @@ enum BeatmapGenerator {
 - Produces: navigation contract — on completion Library shows difficulty badges (Task 3 UI already reads them).
 
 **Steps:**
-- [ ] Codex: implement; progress callback drives UI.
-- [ ] Claude: review (actor isolation / main-thread hops); build gate; tests pass.
-- [ ] Claude: commit `feat: add conversion screen generating all difficulties`.
+- [x] Codex: implement; progress callback drives UI.
+- [x] Claude: review (actor isolation / main-thread hops); build gate; tests pass.
+- [x] Claude: commit `feat: add conversion screen generating all difficulties`.
 
 ### Task 7: Gameplay scene — tap notes, scoring, results
 
