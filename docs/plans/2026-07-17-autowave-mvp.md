@@ -138,9 +138,9 @@ enum BeatmapKit {
 ```
 
 **Steps:**
-- [ ] Codex: tests FIRST with synthesized audio written to temp WAV: (a) click track at 120 BPM → onsets within ±30 ms of each click, tempo within ±3 BPM; (b) pure sustained sine → ≤2 spurious onsets; (c) low sine bursts vs high sine bursts → bass vs treble dominance. Then implementation until green.
-- [ ] Claude: review DSP math (window normalization, half-spectrum indexing, flux rectification); build gate; tests pass.
-- [ ] Claude: commit `feat: add BeatmapKit audio analysis pipeline`.
+- [x] Codex: tests FIRST with synthesized audio written to temp WAV: (a) click track at 120 BPM → onsets within ±30 ms of each click, tempo within ±3 BPM; (b) pure sustained sine → ≤2 spurious onsets; (c) low sine bursts vs high sine bursts → bass vs treble dominance. Then implementation until green.
+- [x] Claude: review DSP math (window normalization, half-spectrum indexing, flux rectification); build gate; tests pass.
+- [x] Claude: commit `feat: add BeatmapKit audio analysis pipeline`.
 
 ### Task 5: Beatmap generation (5 difficulties, deterministic, diverse)
 
