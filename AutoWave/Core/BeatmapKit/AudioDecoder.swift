@@ -9,6 +9,7 @@ struct DecodedAudio: Sendable {
 
 enum AudioDecoderError: Error {
     case invalidInputFormat
+    case unusableInput
     case conversionFailed
 }
 
@@ -32,8 +33,11 @@ enum AudioDecoder {
     ) throws -> DecodedAudio {
         let file = try AVAudioFile(forReading: url)
         let inputFormat = file.processingFormat
-        guard inputFormat.sampleRate > 0, file.length > 0 else {
-            return DecodedAudio(samples: [], sampleRate: outputSampleRate, duration: 0)
+        guard file.length > 0 else {
+            throw AudioDecoderError.unusableInput
+        }
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            throw AudioDecoderError.unusableInput
         }
 
         guard let outputFormat = AVAudioFormat(
@@ -49,14 +53,19 @@ enum AudioDecoder {
         let outputCapacity = AVAudioFrameCount(
             ceil(Double(inputCapacity) * outputSampleRate / inputFormat.sampleRate)
         ) + 1_024
-        let inputBuffer = AVAudioPCMBuffer(
-            pcmFormat: inputFormat,
-            frameCapacity: inputCapacity
-        )!
-        let outputBuffer = AVAudioPCMBuffer(
-            pcmFormat: outputFormat,
-            frameCapacity: outputCapacity
-        )!
+        guard outputCapacity > 0,
+              let inputBuffer = AVAudioPCMBuffer(
+                  pcmFormat: inputFormat,
+                  frameCapacity: inputCapacity
+              ),
+              inputBuffer.frameCapacity > 0,
+              let outputBuffer = AVAudioPCMBuffer(
+                  pcmFormat: outputFormat,
+                  frameCapacity: outputCapacity
+              ),
+              outputBuffer.frameCapacity > 0 else {
+            throw AudioDecoderError.unusableInput
+        }
 
         var samples: [Float] = []
         samples.reserveCapacity(

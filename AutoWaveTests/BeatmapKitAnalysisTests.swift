@@ -37,6 +37,34 @@ final class BeatmapKitAnalysisTests: XCTestCase {
         XCTAssertLessThanOrEqual(result.onsets.count, 2)
     }
 
+    func testEmptyWAVThrowsDuringAnalysis() async throws {
+        let fixtureURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("autowave-empty-analysis-\(UUID().uuidString)")
+            .appendingPathExtension("wav")
+        defer { try? FileManager.default.removeItem(at: fixtureURL) }
+
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 22_050,
+            channels: 1,
+            interleaved: false
+        )!
+        do {
+            let file = try AVAudioFile(forWriting: fixtureURL, settings: format.settings)
+            XCTAssertEqual(file.length, 0)
+        }
+
+        do {
+            _ = try await BeatmapKit.analyze(fileAt: fixtureURL, progress: nil)
+            XCTFail("Expected empty audio analysis to throw")
+        } catch {
+            guard case AudioDecoderError.unusableInput = error else {
+                XCTFail("Unexpected error: \(error)")
+                return
+            }
+        }
+    }
+
     func testBandBurstsPreserveLowAndHighSpectralDominance() async throws {
         let fixtureURL = try makeWAVFixture(duration: 8) { time in
             let section = Int(time / 0.5)
