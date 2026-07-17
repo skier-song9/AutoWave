@@ -175,9 +175,9 @@ enum BeatmapGenerator {
   0.5–0.75 from meanRMS).
 
 **Steps:**
-- [ ] Codex: tests FIRST: determinism (same input+seed ⇒ byte-identical JSON), density ordering (heaven < easy < normal < hard < hell note counts on same analysis), no overlapping notes in one lane, drag durations > 0, hell contains moving drags on a synthetic busy track. Then implement.
-- [ ] Claude: review; build gate; tests pass.
-- [ ] Claude: commit `feat: add deterministic five-difficulty beatmap generator`.
+- [x] Codex: tests FIRST: determinism (same input+seed ⇒ byte-identical JSON), density ordering (heaven < easy < normal < hard < hell note counts on same analysis), no overlapping notes in one lane, drag durations > 0, hell contains moving drags on a synthetic busy track. Then implement.
+- [x] Claude: review; build gate; tests pass.
+- [x] Claude: commit `feat: add deterministic five-difficulty beatmap generator`.
 
 ### Task 6: Analysis screen (convert + persist)
 
