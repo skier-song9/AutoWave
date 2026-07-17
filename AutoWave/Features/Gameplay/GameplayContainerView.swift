@@ -43,12 +43,7 @@ struct GameplayContainerView: View {
         }
         .navigationTitle("게임")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            requestOrientation(.landscape)
-        }
-        .onDisappear {
-            requestOrientation(.all)
-        }
+        .navigationBarBackButtonHidden(true)
         .fullScreenCover(item: $summary) { result in
             if let track, let difficulty {
                 ResultsView(
@@ -67,15 +62,33 @@ struct GameplayContainerView: View {
             }
         }
     }
+}
 
-    private func requestOrientation(_ orientations: UIInterfaceOrientationMask) {
-        guard let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first else { return }
+private struct InteractivePopGestureBlocker: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
+    }
 
-        windowScene.requestGeometryUpdate(
-            .iOS(interfaceOrientations: orientations)
-        )
+    func updateUIViewController(_ uiViewController: Controller, context: Context) { }
+
+    static func dismantleUIViewController(_ uiViewController: Controller, coordinator: ()) {
+        uiViewController.setInteractivePopGestureEnabled(true)
+    }
+
+    final class Controller: UIViewController {
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            setInteractivePopGestureEnabled(false)
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            setInteractivePopGestureEnabled(true)
+            super.viewWillDisappear(animated)
+        }
+
+        fileprivate func setInteractivePopGestureEnabled(_ isEnabled: Bool) {
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = isEnabled
+        }
     }
 }
 
@@ -172,6 +185,7 @@ private struct GameplaySessionView: View {
                     pauseOverlay
                 }
             }
+            .background(InteractivePopGestureBlocker())
         } else {
             Color.black
         }

@@ -41,6 +41,8 @@ struct LibraryView: View {
                 }
             }
         }
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
         .navigationTitle("라이브러리")
         .alert("삭제 오류", isPresented: Binding(
             get: { errorMessage != nil },
@@ -163,6 +165,8 @@ private struct DifficultyPickerView: View {
                 }
             }
         }
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
         .navigationTitle("난이도 선택")
     }
 

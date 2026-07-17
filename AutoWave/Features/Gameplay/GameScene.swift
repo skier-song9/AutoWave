@@ -83,7 +83,8 @@ final class GameScene: SKScene, @unchecked Sendable {
                 return
             }
 
-            guard y <= sceneHeight + noteHeight, y >= -noteHeight else {
+            let halfNoteHeight = noteHeight * 0.5
+            guard y <= sceneHeight + halfNoteHeight, y >= -halfNoteHeight else {
                 isHidden = true
                 return
             }
@@ -295,7 +296,9 @@ final class GameScene: SKScene, @unchecked Sendable {
             }
 
             let endY = position.y - CGFloat(note.duration) * scrollSpeed
-            let visible = max(position.y, endY) >= -48 && min(position.y, endY) <= sceneHeight + 48
+            let visibilityPadding = capHeight * 0.5
+            let visible = max(position.y, endY) >= -visibilityPadding
+                && min(position.y, endY) <= sceneHeight + visibilityPadding
             isHidden = !visible
 
             guard state == .active, fingerOn, playbackTime < note.time + note.duration else {
@@ -563,7 +566,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             let receptor = SKShapeNode()
             receptor.fillColor = .clear
             receptor.strokeColor = laneLineColor
-            receptor.lineWidth = 2
+            receptor.lineWidth = 1
             receptor.zPosition = 2.5
             receptorNodes.append(receptor)
             addChild(receptor)
@@ -745,7 +748,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 : CGFloat(theme.laneFillAlpha * 0.6)
         }
 
-        hitLineY = size.height * 0.15
+        hitLineY = size.height * 0.12
         let hitLinePath = CGMutablePath()
         hitLinePath.move(to: CGPoint(x: 0, y: hitLineY))
         hitLinePath.addLine(to: CGPoint(x: size.width, y: hitLineY))

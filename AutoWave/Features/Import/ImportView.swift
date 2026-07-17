@@ -34,6 +34,7 @@ struct ImportView: View {
             }
         }
         .padding()
+        .frame(maxWidth: 640)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("음원 가져오기")
         .fileImporter(

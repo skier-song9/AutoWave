@@ -17,6 +17,8 @@ struct HomeView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 24)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
         }
         .navigationBarTitleDisplayMode(.inline)
         .task {

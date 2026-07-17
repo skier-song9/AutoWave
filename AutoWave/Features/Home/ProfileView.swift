@@ -115,6 +115,8 @@ struct ProfileView: View {
                     .padding(.vertical, 4)
                 }
             }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
             .navigationTitle("프로필")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

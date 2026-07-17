@@ -26,7 +26,6 @@ targets:
         CFBundleDisplayName: AutoWave
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
   AutoWaveTests:

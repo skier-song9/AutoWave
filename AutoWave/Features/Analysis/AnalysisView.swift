@@ -31,6 +31,8 @@ struct AnalysisView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationTitle("변환")
         .task(id: track?.persistentModelID) {
             guard let track else { return }
