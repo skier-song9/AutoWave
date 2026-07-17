@@ -10,12 +10,15 @@
 		025A5495589AA78AD0C29B98 /* BeatmapEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08741EB06AB2B080C0197533 /* BeatmapEntity.swift */; };
 		05D08CA540F4625164D5CED5 /* TrackEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91602EB219128BF634E03E0 /* TrackEntity.swift */; };
 		12BBF03790D7DCADD0B6A93C /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5D751B151161690EDDFEA7 /* ImportView.swift */; };
+		172A6F44EF074B2507A1DE2F /* BeatmapKitAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */; };
 		1740DB7215EC84D3663B01B1 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96472A1EC16937AB76ADB76 /* LibraryView.swift */; };
+		1B5F2A5714EE956A69215DC2 /* OnsetDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22224A132309EC70DCAEFFCB /* OnsetDetector.swift */; };
 		3AE43FF324EF0826E0FAB2B8 /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CA9B277736D2BFDC86AA79 /* ThemePalette.swift */; };
 		43A89C61B5371E8DF145E4F2 /* AudioImportServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */; };
 		468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */; };
 		4F35CBD7A0DE4AE59E6CFA2E /* Difficulty.swift in Sources */ = {isa = PBXBuildFile; fileRef = B838024FE85D54086054056C /* Difficulty.swift */; };
 		5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB38A448795557AE2574814B /* AudioImportService.swift */; };
+		6DBB1DA40153D4511D06DF93 /* AudioDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83440EAB2298E997D7782708 /* AudioDecoder.swift */; };
 		74CA114E342806F12686B95E /* AnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9AECF34B918B3699EABF5D3 /* AnalysisView.swift */; };
 		7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8C42ADB583CB236F8EDBF3 /* AutoWaveApp.swift */; };
 		81564F3740B39BA6E637C24E /* ScoreRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769C1316680D3B6CA33592A9 /* ScoreRecord.swift */; };
@@ -24,6 +27,9 @@
 		8B675AF49E938DB1D2B0A5BD /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FC0C485E13506255F9E5D2 /* Note.swift */; };
 		8BD1367540EEDE6E31A83AA3 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479C4135C9E7AB3F9874DB47 /* RootView.swift */; };
 		98609DE5D28DF6093289DED5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D13CB8183B74413834203CDE /* Assets.xcassets */; };
+		A6F6EDC8B5C80B704D21F08D /* AnalysisResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */; };
+		DA28903BFFA7CD540C17EFBB /* TempoEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01DCD591067C17F67DDD657 /* TempoEstimator.swift */; };
+		E661925722BE8E1103EF363D /* SpectralAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE9868A791DD6F67C5AD54E /* SpectralAnalyzer.swift */; };
 		E66F167FD2E3EA34EBA98A55 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48179B827633382FE68672F0 /* SmokeTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -42,12 +48,17 @@
 		160827C3FB2FBDE75B7EF568 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayContainerView.swift; sourceTree = "<group>"; };
+		22224A132309EC70DCAEFFCB /* OnsetDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnsetDetector.swift; sourceTree = "<group>"; };
 		2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportServiceTests.swift; sourceTree = "<group>"; };
+		2EE9868A791DD6F67C5AD54E /* SpectralAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectralAnalyzer.swift; sourceTree = "<group>"; };
 		479C4135C9E7AB3F9874DB47 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		48179B827633382FE68672F0 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		769C1316680D3B6CA33592A9 /* ScoreRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreRecord.swift; sourceTree = "<group>"; };
+		7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatmapKitAnalysisTests.swift; sourceTree = "<group>"; };
 		82CA9B277736D2BFDC86AA79 /* ThemePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePalette.swift; sourceTree = "<group>"; };
+		83440EAB2298E997D7782708 /* AudioDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDecoder.swift; sourceTree = "<group>"; };
 		9F8C42ADB583CB236F8EDBF3 /* AutoWaveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoWaveApp.swift; sourceTree = "<group>"; };
+		A01DCD591067C17F67DDD657 /* TempoEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempoEstimator.swift; sourceTree = "<group>"; };
 		A1D15A471F4F77E1DB616866 /* Beatmap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Beatmap.swift; sourceTree = "<group>"; };
 		A3FC0C485E13506255F9E5D2 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCodingTests.swift; sourceTree = "<group>"; };
@@ -56,6 +67,7 @@
 		C96472A1EC16937AB76ADB76 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		C9AECF34B918B3699EABF5D3 /* AnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisView.swift; sourceTree = "<group>"; };
 		D13CB8183B74413834203CDE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisResult.swift; sourceTree = "<group>"; };
 		F91602EB219128BF634E03E0 /* TrackEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackEntity.swift; sourceTree = "<group>"; };
 		FB122FE7F3C40CD155F2DBFF /* AutoWaveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AutoWaveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB38A448795557AE2574814B /* AudioImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportService.swift; sourceTree = "<group>"; };
@@ -115,9 +127,22 @@
 			path = Features;
 			sourceTree = "<group>";
 		};
+		74700A5DFF2590E94B8772D5 /* BeatmapKit */ = {
+			isa = PBXGroup;
+			children = (
+				E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */,
+				83440EAB2298E997D7782708 /* AudioDecoder.swift */,
+				22224A132309EC70DCAEFFCB /* OnsetDetector.swift */,
+				2EE9868A791DD6F67C5AD54E /* SpectralAnalyzer.swift */,
+				A01DCD591067C17F67DDD657 /* TempoEstimator.swift */,
+			);
+			path = BeatmapKit;
+			sourceTree = "<group>";
+		};
 		7D2F65D19E84CE2FBB3318B5 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				74700A5DFF2590E94B8772D5 /* BeatmapKit */,
 				2DABA5B39B51145694A0CEB0 /* Models */,
 			);
 			path = Core;
@@ -170,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */,
+				7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */,
 				ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */,
 				48179B827633382FE68672F0 /* SmokeTests.swift */,
 			);
@@ -272,6 +298,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				43A89C61B5371E8DF145E4F2 /* AudioImportServiceTests.swift in Sources */,
+				172A6F44EF074B2507A1DE2F /* BeatmapKitAnalysisTests.swift in Sources */,
 				468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */,
 				E66F167FD2E3EA34EBA98A55 /* SmokeTests.swift in Sources */,
 			);
@@ -281,7 +308,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A6F6EDC8B5C80B704D21F08D /* AnalysisResult.swift in Sources */,
 				74CA114E342806F12686B95E /* AnalysisView.swift in Sources */,
+				6DBB1DA40153D4511D06DF93 /* AudioDecoder.swift in Sources */,
 				5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */,
 				7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */,
 				87B4A988BF48A66D3BB5FAAC /* Beatmap.swift in Sources */,
@@ -291,8 +320,11 @@
 				12BBF03790D7DCADD0B6A93C /* ImportView.swift in Sources */,
 				1740DB7215EC84D3663B01B1 /* LibraryView.swift in Sources */,
 				8B675AF49E938DB1D2B0A5BD /* Note.swift in Sources */,
+				1B5F2A5714EE956A69215DC2 /* OnsetDetector.swift in Sources */,
 				8BD1367540EEDE6E31A83AA3 /* RootView.swift in Sources */,
 				81564F3740B39BA6E637C24E /* ScoreRecord.swift in Sources */,
+				E661925722BE8E1103EF363D /* SpectralAnalyzer.swift in Sources */,
+				DA28903BFFA7CD540C17EFBB /* TempoEstimator.swift in Sources */,
 				3AE43FF324EF0826E0FAB2B8 /* ThemePalette.swift in Sources */,
 				05D08CA540F4625164D5CED5 /* TrackEntity.swift in Sources */,
 			);
