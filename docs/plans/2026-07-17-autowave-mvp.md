@@ -225,9 +225,9 @@ enum BeatmapGenerator {
 - Produces: `JudgmentEngine.dragTick(noteID: UUID, touchLane: Double, at: TimeInterval) -> DragTickResult` (`scored`, `broken`, `finished`).
 
 **Steps:**
-- [ ] Codex: tests first, then implementation.
-- [ ] Claude: review; build gate; tests pass; simulator smoke-run with drag-heavy hell map.
-- [ ] Claude: commit `feat: add drag ribbon notes with break rule`.
+- [x] Codex: tests first, then implementation.
+- [x] Claude: review; build gate; tests pass; simulator smoke-run with drag-heavy hell map.
+- [x] Claude: commit `feat: add drag ribbon notes with break rule`.
 
 ### Task 9: Audio-reactive background + theme
 
