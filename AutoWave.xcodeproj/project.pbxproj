@@ -12,8 +12,10 @@
 		12BBF03790D7DCADD0B6A93C /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5D751B151161690EDDFEA7 /* ImportView.swift */; };
 		1740DB7215EC84D3663B01B1 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96472A1EC16937AB76ADB76 /* LibraryView.swift */; };
 		3AE43FF324EF0826E0FAB2B8 /* ThemePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82CA9B277736D2BFDC86AA79 /* ThemePalette.swift */; };
+		43A89C61B5371E8DF145E4F2 /* AudioImportServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */; };
 		468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */; };
 		4F35CBD7A0DE4AE59E6CFA2E /* Difficulty.swift in Sources */ = {isa = PBXBuildFile; fileRef = B838024FE85D54086054056C /* Difficulty.swift */; };
+		5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB38A448795557AE2574814B /* AudioImportService.swift */; };
 		74CA114E342806F12686B95E /* AnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9AECF34B918B3699EABF5D3 /* AnalysisView.swift */; };
 		7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8C42ADB583CB236F8EDBF3 /* AutoWaveApp.swift */; };
 		81564F3740B39BA6E637C24E /* ScoreRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769C1316680D3B6CA33592A9 /* ScoreRecord.swift */; };
@@ -40,6 +42,7 @@
 		160827C3FB2FBDE75B7EF568 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayContainerView.swift; sourceTree = "<group>"; };
+		2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportServiceTests.swift; sourceTree = "<group>"; };
 		479C4135C9E7AB3F9874DB47 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		48179B827633382FE68672F0 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		769C1316680D3B6CA33592A9 /* ScoreRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreRecord.swift; sourceTree = "<group>"; };
@@ -55,6 +58,7 @@
 		D13CB8183B74413834203CDE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		F91602EB219128BF634E03E0 /* TrackEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackEntity.swift; sourceTree = "<group>"; };
 		FB122FE7F3C40CD155F2DBFF /* AutoWaveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AutoWaveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB38A448795557AE2574814B /* AudioImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -139,6 +143,7 @@
 		BF2E4BF509C8D372AD0137C7 /* Import */ = {
 			isa = PBXGroup;
 			children = (
+				FB38A448795557AE2574814B /* AudioImportService.swift */,
 				AF5D751B151161690EDDFEA7 /* ImportView.swift */,
 			);
 			path = Import;
@@ -164,6 +169,7 @@
 		E1E04F496C3AD882E41B2EF8 /* AutoWaveTests */ = {
 			isa = PBXGroup;
 			children = (
+				2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */,
 				ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */,
 				48179B827633382FE68672F0 /* SmokeTests.swift */,
 			);
@@ -265,6 +271,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				43A89C61B5371E8DF145E4F2 /* AudioImportServiceTests.swift in Sources */,
 				468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */,
 				E66F167FD2E3EA34EBA98A55 /* SmokeTests.swift in Sources */,
 			);
@@ -275,6 +282,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				74CA114E342806F12686B95E /* AnalysisView.swift in Sources */,
+				5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */,
 				7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */,
 				87B4A988BF48A66D3BB5FAAC /* Beatmap.swift in Sources */,
 				025A5495589AA78AD0C29B98 /* BeatmapEntity.swift in Sources */,

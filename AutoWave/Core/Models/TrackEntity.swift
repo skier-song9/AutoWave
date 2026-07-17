@@ -7,11 +7,12 @@ final class TrackEntity {
     var sourceFilename: String
     var importedAt: Date
     var relativeAudioPath: String
+    var duration: TimeInterval = 0
 
     @Relationship(deleteRule: .cascade, inverse: \BeatmapEntity.track)
     var beatmaps: [BeatmapEntity] = []
 
-    @Relationship(inverse: \ScoreRecord.track)
+    @Relationship(deleteRule: .cascade, inverse: \ScoreRecord.track)
     var scoreRecords: [ScoreRecord] = []
 
     var audioURL: URL {
@@ -28,11 +29,13 @@ final class TrackEntity {
         title: String,
         sourceFilename: String,
         importedAt: Date,
-        relativeAudioPath: String
+        relativeAudioPath: String,
+        duration: TimeInterval = 0
     ) {
         self.title = title
         self.sourceFilename = sourceFilename
         self.importedAt = importedAt
         self.relativeAudioPath = relativeAudioPath
+        self.duration = duration
     }
 }
