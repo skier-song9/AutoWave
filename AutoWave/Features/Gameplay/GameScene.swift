@@ -2,8 +2,7 @@ import Foundation
 import SpriteKit
 import UIKit
 
-@MainActor
-final class GameScene: SKScene {
+final class GameScene: SKScene, @unchecked Sendable {
     private final class DropletNode: SKNode {
         let note: Note
 
@@ -358,9 +357,9 @@ final class GameScene: SKScene {
     private let beatmap: Beatmap
     private let judgmentEngine: JudgmentEngine
     private let visualizerTap: VisualizerTap
-    private let playbackTime: () -> TimeInterval
-    private let playbackFinished: () -> Bool
-    private let onComplete: () -> Void
+    private let playbackTime: @Sendable () -> TimeInterval
+    private let playbackFinished: @Sendable () -> Bool
+    private let onComplete: @MainActor () -> Void
     private let noteColor: SKColor
     private let scrollSpeed: CGFloat
     private let lastNoteTime: TimeInterval?
@@ -378,23 +377,25 @@ final class GameScene: SKScene {
     private var sceneStartTime: TimeInterval?
     private var lastFrameTime: TimeInterval?
     private var hasCompleted = false
+    private var visualizerBands = [Float](repeating: 0, count: VisualizerTap.bandCount)
+    private var visualizerGeneration: UInt64 = 0
     private var activeDragTouch: UITouch?
     private var activeDragNoteID: UUID?
     private var activeDragTouchLane: Double?
     private var nextDragTickTime: TimeInterval?
     private let dragTickInterval: TimeInterval = 0.1
-    private let perfectHaptic = UIImpactFeedbackGenerator(style: .rigid)
-    private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
-    private let dragBreakHaptic = UINotificationFeedbackGenerator()
+    private var perfectHaptic: UIImpactFeedbackGenerator?
+    private var lightHaptic: UIImpactFeedbackGenerator?
+    private var dragBreakHaptic: UINotificationFeedbackGenerator?
 
     init(
         beatmap: Beatmap,
         difficulty: Difficulty,
         judgmentEngine: JudgmentEngine,
         visualizerTap: VisualizerTap,
-        playbackTime: @escaping () -> TimeInterval,
-        playbackFinished: @escaping () -> Bool,
-        onComplete: @escaping () -> Void
+        playbackTime: @escaping @Sendable () -> TimeInterval,
+        playbackFinished: @escaping @Sendable () -> Bool,
+        onComplete: @escaping @MainActor () -> Void
     ) {
         self.beatmap = beatmap
         self.judgmentEngine = judgmentEngine
@@ -410,7 +411,7 @@ final class GameScene: SKScene {
         )
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
         lastNoteTime = beatmap.notes.map(\.time).max()
-        super.init(size: UIScreen.main.bounds.size)
+        super.init(size: CGSize(width: 1, height: 1))
         scaleMode = .resizeFill
     }
 
@@ -420,9 +421,9 @@ final class GameScene: SKScene {
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(white: 0.025, alpha: 1)
-        perfectHaptic.prepare()
-        lightHaptic.prepare()
-        dragBreakHaptic.prepare()
+        Task { @MainActor [weak self] in
+            self?.prepareHaptics()
+        }
 
         backgroundOverlayNode.fillColor = paletteColor(
             saturation: CGFloat(beatmap.palette.saturation * 0.85),
@@ -478,7 +479,12 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard !hasCompleted else { return }
 
-        visualizerTap.pullLatestBands()
+        if let generation = visualizerTap.copyLatestSnapshot(
+            ifNewerThan: visualizerGeneration,
+            to: &visualizerBands
+        ) {
+            visualizerGeneration = generation
+        }
         updateRippleField(at: currentTime)
         let time = playbackTime()
         let misses = judgmentEngine.advance(to: time)
@@ -513,7 +519,9 @@ final class GameScene: SKScene {
 
         if playbackFinished() || (lastNoteTime.map { time >= $0 + 2 } ?? false) {
             hasCompleted = true
-            onComplete()
+            Task { @MainActor [onComplete] in
+                onComplete()
+            }
         }
     }
 
@@ -618,7 +626,7 @@ final class GameScene: SKScene {
         let delta = min(max(currentTime - (lastFrameTime ?? currentTime), 0), 0.1)
         lastFrameTime = currentTime
 
-        let bands = visualizerTap.bands
+        let bands = visualizerBands
         let bass = bandMean(bands, from: 0, to: 4)
         let mid = bandMean(bands, from: 4, to: 10)
         let overall = bandMean(bands, from: 0, to: bands.count)
@@ -728,8 +736,10 @@ final class GameScene: SKScene {
             ribbon.markScored(at: time)
         case .broken:
             ribbon.markBroken(at: time)
-            dragBreakHaptic.notificationOccurred(.warning)
-            dragBreakHaptic.prepare()
+            Task { @MainActor [weak self] in
+                self?.dragBreakHaptic?.notificationOccurred(.warning)
+                self?.dragBreakHaptic?.prepare()
+            }
             clearActiveDrag()
         case .finished:
             ribbon.markFinished()
@@ -814,16 +824,22 @@ final class GameScene: SKScene {
         switch result.judgment {
         case .perfect:
             judgmentText = "퍼펙트"
-            perfectHaptic.impactOccurred(intensity: 0.7)
-            perfectHaptic.prepare()
+            Task { @MainActor [weak self] in
+                self?.perfectHaptic?.impactOccurred(intensity: 0.7)
+                self?.perfectHaptic?.prepare()
+            }
         case .great:
             judgmentText = "그레이트"
-            lightHaptic.impactOccurred()
-            lightHaptic.prepare()
+            Task { @MainActor [weak self] in
+                self?.lightHaptic?.impactOccurred()
+                self?.lightHaptic?.prepare()
+            }
         case .good:
             judgmentText = "굿"
-            lightHaptic.impactOccurred()
-            lightHaptic.prepare()
+            Task { @MainActor [weak self] in
+                self?.lightHaptic?.impactOccurred()
+                self?.lightHaptic?.prepare()
+            }
         case .miss:
             judgmentText = "미스"
         }
@@ -846,6 +862,16 @@ final class GameScene: SKScene {
             .removeFromParent()
         ])
         label.run(.sequence([show, hide]))
+    }
+
+    @MainActor
+    private func prepareHaptics() {
+        perfectHaptic = UIImpactFeedbackGenerator(style: .rigid)
+        lightHaptic = UIImpactFeedbackGenerator(style: .light)
+        dragBreakHaptic = UINotificationFeedbackGenerator()
+        perfectHaptic?.prepare()
+        lightHaptic?.prepare()
+        dragBreakHaptic?.prepare()
     }
 
     private func showSplash(at point: CGPoint) {

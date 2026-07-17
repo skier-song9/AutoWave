@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Observation
+import os
 import SpriteKit
 import SwiftData
 
@@ -9,6 +10,56 @@ struct GameplaySummary: Equatable, Identifiable, Sendable {
     let score: Int
     let maxCombo: Int
     let judgmentCounts: JudgmentCounts
+}
+
+final class PlaybackClock: @unchecked Sendable {
+    private weak var playerNode: AVAudioPlayerNode?
+    private var offset: TimeInterval = 0
+    private var finished = false
+    private var lock = os_unfair_lock_s()
+
+    init(playerNode: AVAudioPlayerNode) {
+        self.playerNode = playerNode
+    }
+
+    var currentTime: TimeInterval {
+        let offset = withLock { self.offset }
+        guard
+            let playerNode,
+            let renderTime = playerNode.lastRenderTime,
+            let playerTime = playerNode.playerTime(forNodeTime: renderTime),
+            playerTime.sampleRate > 0
+        else {
+            return offset
+        }
+
+        return max(
+            offset + Double(playerTime.sampleTime) / playerTime.sampleRate,
+            0
+        )
+    }
+
+    var isFinished: Bool {
+        withLock { finished }
+    }
+
+    func setOffset(_ offset: TimeInterval) {
+        withLock {
+            self.offset = max(offset, 0)
+        }
+    }
+
+    func setFinished(_ finished: Bool) {
+        withLock {
+            self.finished = finished
+        }
+    }
+
+    private func withLock<T>(_ body: () -> T) -> T {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return body()
+    }
 }
 
 @MainActor
@@ -36,9 +87,8 @@ final class GameplayViewModel {
     @ObservationIgnored private var playerNode: AVAudioPlayerNode?
     @ObservationIgnored private var visualizerTap: VisualizerTap?
     @ObservationIgnored private var gameplayScene: GameScene?
-    @ObservationIgnored private var audioFinished = false
+    @ObservationIgnored private var playbackClock: PlaybackClock?
     @ObservationIgnored private var hasCompleted = false
-    @ObservationIgnored private var playbackTimeOffset: TimeInterval = 0
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
 
     init(track: TrackEntity, difficulty: Difficulty) {
@@ -79,10 +129,9 @@ final class GameplayViewModel {
                 to: newAudioEngine.mainMixerNode,
                 format: newAudioFile.processingFormat
             )
-            newPlayerNode.scheduleFile(newAudioFile, at: nil) { [weak self] in
-                Task { @MainActor [weak self] in
-                    self?.audioFinished = true
-                }
+            let clock = PlaybackClock(playerNode: newPlayerNode)
+            newPlayerNode.scheduleFile(newAudioFile, at: nil) { [clock] in
+                clock.setFinished(true)
             }
             try newAudioEngine.start()
             let newVisualizerTap = VisualizerTap()
@@ -95,25 +144,26 @@ final class GameplayViewModel {
             audioFile = newAudioFile
             playerNode = newPlayerNode
             visualizerTap = newVisualizerTap
-            audioFinished = false
+            playbackClock = clock
             hasCompleted = false
             isPaused = false
             countdown = nil
-            playbackTimeOffset = 0
             saveErrorMessage = nil
             gameplayScene = GameScene(
                 beatmap: decodedBeatmap,
                 difficulty: difficulty,
                 judgmentEngine: judgmentEngine,
                 visualizerTap: newVisualizerTap,
-                playbackTime: { [weak self] in
-                    self?.currentPlaybackTime() ?? 0
+                playbackTime: {
+                    clock.currentTime
                 },
-                playbackFinished: { [weak self] in
-                    self?.audioFinished ?? false
+                playbackFinished: {
+                    clock.isFinished
                 },
                 onComplete: { [weak self] in
-                    self?.complete(context: context, onComplete: onComplete)
+                    Task { @MainActor [weak self] in
+                        self?.complete(context: context, onComplete: onComplete)
+                    }
                 }
             )
             state = .ready
@@ -123,19 +173,7 @@ final class GameplayViewModel {
     }
 
     func currentPlaybackTime() -> TimeInterval {
-        guard
-            let playerNode,
-            let renderTime = playerNode.lastRenderTime,
-            let playerTime = playerNode.playerTime(forNodeTime: renderTime),
-            playerTime.sampleRate > 0
-        else {
-            return playbackTimeOffset
-        }
-
-        return max(
-            playbackTimeOffset + Double(playerTime.sampleTime) / playerTime.sampleRate,
-            0
-        )
+        playbackClock?.currentTime ?? 0
     }
 
     func pause() {
@@ -144,7 +182,8 @@ final class GameplayViewModel {
         countdownTask?.cancel()
         countdownTask = nil
         countdown = nil
-        playbackTimeOffset = currentPlaybackTime()
+        let offset = playbackClock?.currentTime ?? 0
+        playbackClock?.setOffset(offset)
         playerNode?.stop()
         audioEngine?.pause()
         gameplayScene?.isPaused = true
@@ -183,13 +222,15 @@ final class GameplayViewModel {
         audioEngine?.stop()
         audioFile = nil
         visualizerTap = nil
+        playbackClock = nil
     }
 
     private func resumePlayback() {
         guard
             let audioFile,
             let audioEngine,
-            let playerNode
+            let playerNode,
+            let playbackClock
         else {
             state = .failed(message: "재생을 다시 시작하지 못했어요")
             return
@@ -201,28 +242,28 @@ final class GameplayViewModel {
             return
         }
 
+        let playbackOffset = playbackClock.currentTime
+        playbackClock.setOffset(playbackOffset)
         let startingFrame = min(
-            max(AVAudioFramePosition((playbackTimeOffset * sampleRate).rounded()), 0),
+            max(AVAudioFramePosition((playbackOffset * sampleRate).rounded()), 0),
             audioFile.length
         )
         let remainingFrames = audioFile.length - startingFrame
         guard remainingFrames > 0 else {
-            audioFinished = true
+            playbackClock.setFinished(true)
             isPaused = false
             gameplayScene?.isPaused = false
             return
         }
 
-        audioFinished = false
+        playbackClock.setFinished(false)
         playerNode.scheduleSegment(
             audioFile,
             startingFrame: startingFrame,
             frameCount: AVAudioFrameCount(remainingFrames),
             at: nil
-        ) { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.audioFinished = true
-            }
+        ) { [playbackClock] in
+            playbackClock.setFinished(true)
         }
 
         do {

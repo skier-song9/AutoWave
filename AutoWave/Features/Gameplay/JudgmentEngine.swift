@@ -28,7 +28,8 @@ struct JudgmentCounts: Equatable, Sendable {
     var miss = 0
 }
 
-final class JudgmentEngine {
+// Mutations are serialized by SpriteKit scene callbacks; the view model reads final counters after completion.
+final class JudgmentEngine: @unchecked Sendable {
     private struct PendingNote {
         let note: Note
         var consumed = false

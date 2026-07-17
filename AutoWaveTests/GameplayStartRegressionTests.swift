@@ -75,8 +75,17 @@ final class GameplayStartRegressionTests: XCTestCase {
         // 5. Drive the scene like SpriteKit would (didMove needs a view).
         let view = SKView(frame: CGRect(x: 0, y: 0, width: 852, height: 393))
         view.presentScene(scene)
+        let renderQueue = DispatchQueue(label: "GameplayStartRegressionTests.renderQueue")
         for step in 0..<120 {
-            scene.update(CACurrentMediaTime() + Double(step) / 60.0)
+            renderQueue.sync {
+                scene.update(CACurrentMediaTime() + Double(step) / 60.0)
+            }
+        }
+        // Time jumps exercise multiple advanceDragTicks iterations on the render queue.
+        for time in [3.0, 3.5] {
+            renderQueue.sync {
+                scene.update(CACurrentMediaTime() + time)
+            }
         }
 
         _ = completed

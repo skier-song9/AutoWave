@@ -1,21 +1,46 @@
 @preconcurrency import AVFoundation
 import Accelerate
 import Foundation
-import Observation
 import os
 
+private final class AudioTapStateBox: @unchecked Sendable {
+    private var state: AudioTapState?
+    private var lock = os_unfair_lock_s()
+
+    func replace(_ state: AudioTapState) {
+        os_unfair_lock_lock(&lock)
+        self.state = state
+        os_unfair_lock_unlock(&lock)
+    }
+
+    func clear() {
+        os_unfair_lock_lock(&lock)
+        state = nil
+        os_unfair_lock_unlock(&lock)
+    }
+
+    func copyLatestSnapshot(
+        ifNewerThan generation: UInt64,
+        to destination: inout [Float]
+    ) -> UInt64? {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return state?.copyLatestSnapshot(
+            ifNewerThan: generation,
+            to: &destination
+        )
+    }
+}
+
 @MainActor
-@Observable
 final class VisualizerTap {
     nonisolated static let bandCount = 16
     nonisolated static let fftSize = 1_024
     nonisolated static let tapBufferSize = AVAudioFrameCount(fftSize)
 
-    private(set) var bands = [Float](repeating: 0, count: bandCount)
-
+    private nonisolated let snapshotSource = AudioTapStateBox()
     @ObservationIgnored private var tapState: AudioTapState?
     @ObservationIgnored private var attachedEngine: AVAudioEngine?
-    @ObservationIgnored private var lastPulledGeneration: UInt64 = 0
 
     nonisolated static func bandBinRanges(sampleRate: Float, fftSize: Int) -> [Range<Int>] {
         let lowerFrequency: Float = 40
@@ -58,6 +83,7 @@ final class VisualizerTap {
         let sampleRate = Float(engine.mainMixerNode.outputFormat(forBus: 0).sampleRate)
         let state = AudioTapState(sampleRate: sampleRate)
         tapState = state
+        snapshotSource.replace(state)
         attachedEngine = engine
 
         engine.mainMixerNode.installTap(
@@ -73,17 +99,17 @@ final class VisualizerTap {
         attachedEngine?.mainMixerNode.removeTap(onBus: 0)
         attachedEngine = nil
         tapState = nil
-        lastPulledGeneration = 0
+        snapshotSource.clear()
     }
 
-    func pullLatestBands() {
-        guard let tapState else { return }
-        if let generation = tapState.copyLatestSnapshot(
-            ifNewerThan: lastPulledGeneration,
-            to: &bands
-        ) {
-            lastPulledGeneration = generation
-        }
+    nonisolated func copyLatestSnapshot(
+        ifNewerThan generation: UInt64,
+        to destination: inout [Float]
+    ) -> UInt64? {
+        snapshotSource.copyLatestSnapshot(
+            ifNewerThan: generation,
+            to: &destination
+        )
     }
 }
 
