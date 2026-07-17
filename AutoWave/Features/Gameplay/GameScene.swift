@@ -1018,6 +1018,9 @@ final class GameScene: SKScene, @unchecked Sendable {
         case .good:
             judgmentText = "굿"
             onHaptic(.light)
+        case .bad:
+            judgmentText = "배드"
+            onHaptic(.light)
         case .miss:
             judgmentText = "미스"
         }

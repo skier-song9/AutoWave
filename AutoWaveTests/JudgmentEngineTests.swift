@@ -5,34 +5,48 @@ import XCTest
 final class JudgmentEngineTests: XCTestCase {
     func testWindowEdgesAreInclusiveAndClassifiedByNarrowestWindow() {
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.95)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.955)?.judgment,
             .perfect
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.05)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.045)?.judgment,
             .perfect
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.90)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.920)?.judgment,
             .great
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.10)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.080)?.judgment,
             .great
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.85)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.885)?.judgment,
             .good
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.15)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.115)?.judgment,
             .good
         )
+        XCTAssertEqual(
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.850)?.judgment,
+            .bad
+        )
+        XCTAssertEqual(
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.150)?.judgment,
+            .bad
+        )
+        let badEngine = JudgmentEngine(notes: [note(at: 1.0)])
+        XCTAssertEqual(
+            badEngine.tap(lane: 0, at: 1.150),
+            JudgmentResult(judgment: .bad, pointsAwarded: 1, combo: 0, score: 1)
+        )
+        XCTAssertEqual(badEngine.judgmentCounts.bad, 1)
         XCTAssertNil(JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.849))
         XCTAssertNil(JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.151))
     }
 
-    func testAdvanceEmitsMissAfterGoodWindowAndResetsCombo() {
+    func testAdvanceEmitsMissAfterBadWindowAndResetsCombo() {
         let notes = [note(at: 1.0), note(at: 2.0)]
         let engine = JudgmentEngine(notes: notes)
 
@@ -40,13 +54,14 @@ final class JudgmentEngineTests: XCTestCase {
         XCTAssertEqual(engine.advance(to: 1.151), [])
         XCTAssertEqual(
             engine.advance(to: 2.151),
-            [JudgmentResult(judgment: .miss, pointsAwarded: 0, combo: 0, score: 100)]
+            [JudgmentResult(judgment: .miss, pointsAwarded: 0, combo: 0, score: 6)]
         )
         XCTAssertEqual(engine.judgmentCounts.miss, 1)
         XCTAssertEqual(engine.combo, 0)
+        XCTAssertEqual(engine.life, 95)
     }
 
-    func testThreePerfectsAward303PointsWithComboMultiplier() {
+    func testThreePerfectsAward21PointsWithComboBonus() {
         let engine = JudgmentEngine(notes: [note(at: 1.0), note(at: 2.0), note(at: 3.0)])
 
         let results = [
@@ -55,11 +70,40 @@ final class JudgmentEngineTests: XCTestCase {
             engine.tap(lane: 0, at: 3.0)
         ].compactMap { $0 }
 
-        XCTAssertEqual(results.map(\.pointsAwarded), [100, 101, 102])
+        XCTAssertEqual(results.map(\.pointsAwarded), [6, 7, 8])
         XCTAssertEqual(results.map(\.combo), [1, 2, 3])
-        XCTAssertEqual(results.map(\.score), [100, 201, 303])
-        XCTAssertEqual(engine.score, 303)
+        XCTAssertEqual(results.map(\.score), [6, 13, 21])
+        XCTAssertEqual(engine.score, 21)
         XCTAssertEqual(engine.maxCombo, 3)
+    }
+
+    func testGreatAfterTwoPerfectsUsesNewComboAsBonus() {
+        let engine = JudgmentEngine(notes: [note(at: 1.0), note(at: 2.0), note(at: 3.0)])
+
+        _ = engine.tap(lane: 0, at: 1.0)
+        _ = engine.tap(lane: 0, at: 2.0)
+
+        XCTAssertEqual(
+            engine.tap(lane: 0, at: 3.080),
+            JudgmentResult(judgment: .great, pointsAwarded: 6, combo: 3, score: 19)
+        )
+    }
+
+    func testGoodBreaksComboAndAwardsOnlyBasePoints() {
+        let engine = JudgmentEngine(
+            notes: [note(at: 1.0), note(at: 2.0), note(at: 3.0), note(at: 4.0)]
+        )
+
+        XCTAssertEqual(engine.tap(lane: 0, at: 1.0)?.pointsAwarded, 6)
+        XCTAssertEqual(engine.tap(lane: 0, at: 2.0)?.pointsAwarded, 7)
+        XCTAssertEqual(
+            engine.tap(lane: 0, at: 3.115),
+            JudgmentResult(judgment: .good, pointsAwarded: 2, combo: 0, score: 15)
+        )
+        XCTAssertEqual(
+            engine.tap(lane: 0, at: 4.080),
+            JudgmentResult(judgment: .great, pointsAwarded: 4, combo: 1, score: 19)
+        )
     }
 
     func testTapConsumesNearestUnconsumedNoteInLane() {
@@ -88,6 +132,7 @@ final class JudgmentEngineTests: XCTestCase {
         )
         XCTAssertEqual(engine.judgmentCounts.miss, 1)
         XCTAssertEqual(engine.score, 0)
+        XCTAssertEqual(engine.life, 95)
     }
 
     func testDragHeadHitAndFullHoldScoreTicksUntilFinished() {
@@ -96,7 +141,7 @@ final class JudgmentEngineTests: XCTestCase {
 
         XCTAssertEqual(
             engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0),
-            JudgmentResult(judgment: .perfect, pointsAwarded: 100, combo: 1, score: 100)
+            JudgmentResult(judgment: .perfect, pointsAwarded: 6, combo: 1, score: 6)
         )
 
         XCTAssertEqual(
@@ -104,10 +149,10 @@ final class JudgmentEngineTests: XCTestCase {
                 engine.dragTick(noteID: drag.id, touchLane: 1.0, at: $0)
             },
             [
-                .scored(points: 10, combo: 2),
-                .scored(points: 10, combo: 3),
-                .scored(points: 10, combo: 4),
-                .scored(points: 10, combo: 5)
+                .scored(points: 3, combo: 2),
+                .scored(points: 4, combo: 3),
+                .scored(points: 5, combo: 4),
+                .scored(points: 6, combo: 5)
             ]
         )
         XCTAssertEqual(
@@ -115,7 +160,7 @@ final class JudgmentEngineTests: XCTestCase {
             .finished
         )
         XCTAssertEqual(engine.combo, 5)
-        XCTAssertEqual(engine.score, 140)
+        XCTAssertEqual(engine.score, 24)
     }
 
     func testDragTickToleranceIncludesExactlySixTenthsAndBreaksPastIt() {
@@ -125,7 +170,7 @@ final class JudgmentEngineTests: XCTestCase {
 
         XCTAssertEqual(
             engine.dragTick(noteID: drag.id, touchLane: 1.6, at: 1.1),
-            .scored(points: 10, combo: 2)
+            .scored(points: 3, combo: 2)
         )
         XCTAssertEqual(
             engine.dragTick(noteID: drag.id, touchLane: 1.61, at: 1.2),
@@ -170,8 +215,9 @@ final class JudgmentEngineTests: XCTestCase {
             engine.dragTick(noteID: drag.id, touchLane: 1.0, at: 1.3),
             .inactive
         )
-        XCTAssertEqual(engine.score, 110)
+        XCTAssertEqual(engine.score, 9)
         XCTAssertEqual(engine.combo, 0)
+        XCTAssertEqual(engine.life, 95)
     }
 
     func testMovingDragUsesInterpolatedSpineLane() {
@@ -186,7 +232,7 @@ final class JudgmentEngineTests: XCTestCase {
 
         XCTAssertEqual(
             engine.dragTick(noteID: drag.id, touchLane: 1.75, at: 1.5),
-            .scored(points: 10, combo: 2)
+            .scored(points: 3, combo: 2)
         )
     }
 
@@ -201,6 +247,7 @@ final class JudgmentEngineTests: XCTestCase {
         )
         XCTAssertEqual(engine.advance(to: 2.0), [])
         XCTAssertEqual(engine.judgmentCounts.miss, 1)
+        XCTAssertEqual(engine.life, 95)
     }
 
     func testMissingDragHeadEmitsOneMissAtHeadTimeout() {
@@ -217,6 +264,55 @@ final class JudgmentEngineTests: XCTestCase {
             .inactive
         )
         XCTAssertEqual(engine.judgmentCounts.miss, 1)
+    }
+
+    func testMissesReduceLifeByFiveAndNeverBelowZero() {
+        let engine = JudgmentEngine(notes: (1...20).map { note(at: TimeInterval($0)) })
+
+        XCTAssertFalse(engine.isGameOver)
+        XCTAssertEqual(engine.advance(to: 19.151).count, 19)
+        XCTAssertEqual(engine.life, 5)
+        XCTAssertFalse(engine.isGameOver)
+
+        XCTAssertEqual(engine.advance(to: 20.151).count, 1)
+        XCTAssertEqual(engine.life, 0)
+        XCTAssertTrue(engine.isGameOver)
+
+        XCTAssertEqual(engine.advance(to: 21.0), [])
+        XCTAssertEqual(engine.life, 0)
+        XCTAssertTrue(engine.isGameOver)
+    }
+
+    func testLifeRegeneratesAtEach200PointThresholdAndCapsAt100() {
+        let engine = JudgmentEngine(
+            notes: [note(at: 1.0)] + (2...41).map { note(at: TimeInterval($0)) }
+        )
+
+        _ = engine.advance(to: 1.151)
+        XCTAssertEqual(engine.life, 95)
+
+        for time in 2...18 {
+            _ = engine.tap(lane: 0, at: TimeInterval(time))
+        }
+        XCTAssertEqual(engine.score, 238)
+        XCTAssertEqual(engine.life, 96)
+
+        for time in 19...41 {
+            _ = engine.tap(lane: 0, at: TimeInterval(time))
+        }
+        XCTAssertEqual(engine.score, 1020)
+        XCTAssertEqual(engine.life, 100)
+    }
+
+    func testMultipleScoreThresholdsInOneLargeRunAwardOneLifePerThresholdAndRespectCap() {
+        let engine = JudgmentEngine(notes: (1...210).map { note(at: TimeInterval($0)) })
+
+        for time in 1...210 {
+            _ = engine.tap(lane: 0, at: TimeInterval(time))
+        }
+
+        XCTAssertEqual(engine.score, 23205)
+        XCTAssertEqual(engine.life, 100)
     }
 
     private func note(at time: TimeInterval) -> Note {
