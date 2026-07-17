@@ -251,9 +251,9 @@ enum BeatmapGenerator {
 - Test: full `xcodebuild test` suite green.
 
 **Steps:**
-- [ ] Codex: implement.
-- [ ] Claude: review; build gate + full test suite; final simulator run-through of Library → Import → Analysis → Gameplay → Results.
-- [ ] Claude: commit `feat: polish gameplay feel and UI`.
+- [x] Codex: implement.
+- [x] Claude: review; build gate + full test suite; final simulator run-through of Library → Import → Analysis → Gameplay → Results.
+- [x] Claude: commit `feat: polish gameplay feel and UI`.
 
 ---
 
