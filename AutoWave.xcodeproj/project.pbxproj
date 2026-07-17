@@ -63,7 +63,7 @@
 		021A8448A89E910EE99515EF /* VisualizerTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualizerTap.swift; sourceTree = "<group>"; };
 		08741EB06AB2B080C0197533 /* BeatmapEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatmapEntity.swift; sourceTree = "<group>"; };
 		160827C3FB2FBDE75B7EF568 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayContainerView.swift; sourceTree = "<group>"; };
 		21F5FCD750E8995AEF6729BE /* GameScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameScene.swift; sourceTree = "<group>"; };
 		22224A132309EC70DCAEFFCB /* OnsetDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnsetDetector.swift; sourceTree = "<group>"; };
@@ -311,8 +311,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = F4CD9BD22895FB19A32034E3 /* Build configuration list for PBXProject "AutoWave" */;
 			developmentRegion = en;
@@ -566,6 +564,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = QSN8D73M83;
 				INFOPLIST_FILE = AutoWave/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -583,6 +582,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = QSN8D73M83;
 				INFOPLIST_FILE = AutoWave/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

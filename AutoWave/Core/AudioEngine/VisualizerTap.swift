@@ -90,7 +90,7 @@ final class VisualizerTap {
             onBus: 0,
             bufferSize: Self.tapBufferSize,
             format: nil
-        ) { [state] buffer, _ in
+        ) { @Sendable [state] buffer, _ in
             state.process(buffer: buffer)
         }
     }

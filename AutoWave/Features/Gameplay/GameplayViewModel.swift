@@ -130,7 +130,7 @@ final class GameplayViewModel {
                 format: newAudioFile.processingFormat
             )
             let clock = PlaybackClock(playerNode: newPlayerNode)
-            newPlayerNode.scheduleFile(newAudioFile, at: nil) { [clock] in
+            newPlayerNode.scheduleFile(newAudioFile, at: nil) { @Sendable [clock] in
                 clock.setFinished(true)
             }
             try newAudioEngine.start()
@@ -262,7 +262,7 @@ final class GameplayViewModel {
             startingFrame: startingFrame,
             frameCount: AVAudioFrameCount(remainingFrames),
             at: nil
-        ) { [playbackClock] in
+        ) { @Sendable [playbackClock] in
             playbackClock.setFinished(true)
         }
 
