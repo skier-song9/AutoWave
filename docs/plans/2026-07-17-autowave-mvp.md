@@ -209,9 +209,9 @@ enum BeatmapGenerator {
 - Produces: `JudgmentEngine.judge(tapAt time: TimeInterval, lane: Int) -> Judgment`; `Judgment` enum `{ perfect, great, good, miss }`.
 
 **Steps:**
-- [ ] Codex: `JudgmentEngine` tests first, then scene. Time source = audio player render time, not wall clock.
-- [ ] Claude: review (timing source, node pooling); build gate; tests pass; smoke-run on simulator.
-- [ ] Claude: commit `feat: add playable tap-note gameplay and results`.
+- [x] Codex: `JudgmentEngine` tests first, then scene. Time source = audio player render time, not wall clock.
+- [x] Claude: review (timing source, node pooling); build gate; tests pass; smoke-run on simulator.
+- [x] Claude: commit `feat: add playable tap-note gameplay and results`.
 
 ### Task 8: Drag ribbons (hold + lateral movement + break rule)
 
