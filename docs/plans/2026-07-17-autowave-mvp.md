@@ -240,9 +240,9 @@ enum BeatmapGenerator {
 - Consumes: `ThemePalette` (Task 2), playback engine (Task 7).
 
 **Steps:**
-- [ ] Codex: implement; cap visualizer work to preallocated buffers (no per-frame allocs in tap).
-- [ ] Claude: review (audio thread safety — tap must not touch UI directly); build gate; simulator smoke-run.
-- [ ] Claude: commit `feat: add audio-reactive ripple background and theming`.
+- [x] Codex: implement; cap visualizer work to preallocated buffers (no per-frame allocs in tap).
+- [x] Claude: review (audio thread safety — tap must not touch UI directly); build gate; simulator smoke-run.
+- [x] Claude: commit `feat: add audio-reactive ripple background and theming`.
 
 ### Task 10: Polish pass
 
