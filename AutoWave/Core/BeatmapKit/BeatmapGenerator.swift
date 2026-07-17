@@ -1,7 +1,7 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 1
+    static let version = 2
 
     static func generate(from analysis: AnalysisResult, difficulty: Difficulty, seed: UInt64) -> Beatmap {
         let profile = DifficultyProfile.profile(for: difficulty)
@@ -81,12 +81,21 @@ enum BeatmapGenerator {
             )
         }
 
+        let theme = GameTheme.select(
+            tempo: analysis.tempo,
+            meanBass: analysis.meanBass,
+            meanMid: analysis.meanMid,
+            meanTreble: analysis.meanTreble,
+            meanRMS: analysis.meanRMS
+        )
+
         return Beatmap(
             difficulty: difficulty,
             tempo: analysis.tempo,
             notes: notes,
-            palette: makePalette(from: analysis),
-            generatorVersion: version
+            palette: theme.themePalette,
+            generatorVersion: version,
+            themeID: theme.id
         )
     }
 
@@ -101,12 +110,6 @@ enum BeatmapGenerator {
         var lane: Int
         var duration: TimeInterval
         var lanePath: [LaneKeyframe]
-    }
-
-    private struct Band {
-        var value: Double
-        var hue: Double
-        var order: Int
     }
 
     private static func selectOnsets(
@@ -298,35 +301,6 @@ enum BeatmapGenerator {
                 + (candidate.kind == .drag ? candidate.duration + 0.15 : 0)
         }
         return result
-    }
-
-    private static func makePalette(from analysis: AnalysisResult) -> ThemePalette {
-        let bands = [
-            Band(value: Double(analysis.meanBass), hue: 0.72, order: 0),
-            Band(value: Double(analysis.meanMid), hue: 0.50, order: 1),
-            Band(value: Double(analysis.meanTreble), hue: 0.08, order: 2)
-        ].sorted {
-            if $0.value == $1.value {
-                return $0.order < $1.order
-            }
-            return $0.value > $1.value
-        }
-        let dominanceTotal = bands[0].value + bands[1].value
-        let hue: Double
-        if dominanceTotal > 0 {
-            hue = (bands[0].hue * bands[0].value + bands[1].hue * bands[1].value) / dominanceTotal
-        } else {
-            hue = bands[0].hue
-        }
-
-        let values = bands.map(\.value)
-        let maximum = values.max() ?? 0
-        let minimum = values.min() ?? 0
-        let spread = maximum > 0 ? (maximum - minimum) / maximum : 0
-        let saturation = 0.55 + 0.25 * min(1, max(0, spread))
-        let rms = min(1, max(0, Double(analysis.meanRMS)))
-        let brightness = 0.50 + 0.25 * rms
-        return ThemePalette(hue: hue, saturation: saturation, brightness: brightness)
     }
 
     private static func makeID(seed: UInt64, index: Int) -> UUID {

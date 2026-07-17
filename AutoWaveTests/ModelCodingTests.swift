@@ -29,6 +29,26 @@ final class ModelCodingTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
+    func testBeatmapDecodesDeepSeaForJSONWithoutThemeID() throws {
+        let oldJSON = """
+        {
+          "difficulty": "normal",
+          "tempo": 120,
+          "notes": [],
+          "palette": {
+            "hue": 0.5,
+            "saturation": 0.6,
+            "brightness": 0.7
+          },
+          "generatorVersion": 1
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(Beatmap.self, from: oldJSON)
+
+        XCTAssertEqual(decoded.themeID, "deepSea")
+    }
+
     func testInMemoryModelContainerFetchesTrackAndBeatmap() throws {
         let schema = Schema([TrackEntity.self, BeatmapEntity.self, ScoreRecord.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

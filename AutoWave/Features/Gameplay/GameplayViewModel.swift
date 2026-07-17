@@ -90,6 +90,9 @@ final class GameplayViewModel {
     @ObservationIgnored private var playbackClock: PlaybackClock?
     @ObservationIgnored private var hasCompleted = false
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
+    @ObservationIgnored private var perfectHaptic: UIImpactFeedbackGenerator?
+    @ObservationIgnored private var lightHaptic: UIImpactFeedbackGenerator?
+    @ObservationIgnored private var dragBreakHaptic: UINotificationFeedbackGenerator?
 
     init(track: TrackEntity, difficulty: Difficulty) {
         self.track = track
@@ -107,6 +110,7 @@ final class GameplayViewModel {
         guard state == .idle else { return }
 
         do {
+            prepareHaptics()
             guard let beatmapEntity = track.beatmaps.first(where: {
                 $0.difficulty == difficulty.rawValue
             }) else {
@@ -163,6 +167,11 @@ final class GameplayViewModel {
                 onComplete: { [weak self] in
                     Task { @MainActor [weak self] in
                         self?.complete(context: context, onComplete: onComplete)
+                    }
+                },
+                onHaptic: { [weak self] event in
+                    Task { @MainActor [weak self] in
+                        self?.emitHaptic(event)
                     }
                 }
             )
@@ -307,6 +316,29 @@ final class GameplayViewModel {
 
         state = .completed
         onComplete(summary)
+    }
+
+    private func prepareHaptics() {
+        perfectHaptic = UIImpactFeedbackGenerator(style: .rigid)
+        lightHaptic = UIImpactFeedbackGenerator(style: .light)
+        dragBreakHaptic = UINotificationFeedbackGenerator()
+        perfectHaptic?.prepare()
+        lightHaptic?.prepare()
+        dragBreakHaptic?.prepare()
+    }
+
+    private func emitHaptic(_ event: GameplayHaptic) {
+        switch event {
+        case .perfect:
+            perfectHaptic?.impactOccurred(intensity: 0.7)
+            perfectHaptic?.prepare()
+        case .light:
+            lightHaptic?.impactOccurred()
+            lightHaptic?.prepare()
+        case .warning:
+            dragBreakHaptic?.notificationOccurred(.warning)
+            dragBreakHaptic?.prepare()
+        }
     }
 }
 

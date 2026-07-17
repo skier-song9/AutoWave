@@ -85,6 +85,96 @@ final class BeatmapGeneratorTests: XCTestCase {
         }
     }
 
+    func testThemeSelectionUsesDominanceTempoAndNearTieRule() {
+        XCTAssertEqual(
+            GameTheme.select(
+                tempo: 129,
+                meanBass: 0.8,
+                meanMid: 0.2,
+                meanTreble: 0.1,
+                meanRMS: 0.5
+            ).id,
+            "deepSea"
+        )
+        XCTAssertEqual(
+            GameTheme.select(
+                tempo: 130,
+                meanBass: 0.8,
+                meanMid: 0.2,
+                meanTreble: 0.1,
+                meanRMS: 0.5
+            ).id,
+            "neonRush"
+        )
+        XCTAssertEqual(
+            GameTheme.select(
+                tempo: 120,
+                meanBass: 0.2,
+                meanMid: 0.8,
+                meanTreble: 0.1,
+                meanRMS: 0.5
+            ).id,
+            "tide"
+        )
+        XCTAssertEqual(
+            GameTheme.select(
+                tempo: 120,
+                meanBass: 0.2,
+                meanMid: 0.1,
+                meanTreble: 0.8,
+                meanRMS: 0.5
+            ).id,
+            "dawn"
+        )
+        XCTAssertEqual(
+            GameTheme.select(
+                tempo: 180,
+                meanBass: 0.8,
+                meanMid: 0.75,
+                meanTreble: 0.1,
+                meanRMS: 0.5
+            ).id,
+            "prism"
+        )
+    }
+
+    func testThemePresetsExposeExactDesignTokens() throws {
+        XCTAssertEqual(GameTheme.presets.count, 5)
+
+        let deepSea = try XCTUnwrap(GameTheme.presets.first { $0.id == "deepSea" })
+        XCTAssertEqual(deepSea.displayName, "심해")
+        XCTAssertEqual(deepSea.backgroundTop, RGB(hex: 0x070B26))
+        XCTAssertEqual(deepSea.backgroundBottom, RGB(hex: 0x17103F))
+        XCTAssertEqual(deepSea.tapNote, RGB(hex: 0x4FC3F7))
+        XCTAssertEqual(deepSea.tapNoteStroke, RGB(hex: 0xFFFFFF))
+        XCTAssertEqual(deepSea.dragBody, RGB(hex: 0x7E57C2))
+        XCTAssertEqual(deepSea.dragCap, RGB(hex: 0xB39DDB))
+        XCTAssertEqual(deepSea.ripple, RGB(hex: 0x283593))
+        XCTAssertEqual(deepSea.judgmentAccent, RGB(hex: 0xFFD54F))
+        XCTAssertEqual(deepSea.laneLine, RGB(hex: 0x7986CB))
+
+        let expectedIDs = ["deepSea", "neonRush", "tide", "dawn", "prism"]
+        XCTAssertEqual(GameTheme.presets.map(\.id), expectedIDs)
+    }
+
+    func testGeneratorStoresSelectedThemeAndVersion() {
+        let analysis = AnalysisResult(
+            duration: 10,
+            tempo: 140,
+            onsets: [],
+            meanBass: 0.8,
+            meanMid: 0.2,
+            meanTreble: 0.1,
+            meanRMS: 0.5
+        )
+
+        let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
+
+        XCTAssertEqual(beatmap.themeID, "neonRush")
+        XCTAssertEqual(beatmap.generatorVersion, 2)
+        XCTAssertEqual(beatmap.palette, beatmapThemePalette(for: GameTheme.presets[1]))
+    }
+
     func testHellContainsMovingDrag() {
         let beatmap = BeatmapGenerator.generate(from: makeBusyAnalysis(), difficulty: .hell, seed: 42)
 
@@ -106,7 +196,7 @@ final class BeatmapGeneratorTests: XCTestCase {
         }
     }
 
-    func testPaletteUsesBandDominanceAndRMS() {
+    func testPaletteUsesSelectedThemeTapColor() {
         let analysis = AnalysisResult(
             duration: 10,
             tempo: 120,
@@ -118,9 +208,7 @@ final class BeatmapGeneratorTests: XCTestCase {
         )
 
         let palette = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 0).palette
-        XCTAssertEqual(palette.hue, (0.8 * 0.72 + 0.4 * 0.50) / 1.2, accuracy: 1e-12)
-        XCTAssertEqual(palette.saturation, 0.55 + 0.25 * ((0.8 - 0.1) / 0.8), accuracy: 1e-12)
-        XCTAssertEqual(palette.brightness, 0.625, accuracy: 1e-12)
+        XCTAssertEqual(palette, GameTheme.preset(id: "deepSea").themePalette)
     }
 
     private func makeBusyAnalysis() -> AnalysisResult {
@@ -147,6 +235,31 @@ final class BeatmapGeneratorTests: XCTestCase {
             meanMid: 0.6,
             meanTreble: 0.3,
             meanRMS: 0.7
+        )
+    }
+
+    private func beatmapThemePalette(for theme: GameTheme) -> ThemePalette {
+        let color = theme.tapNote
+        let maximum = max(color.r, max(color.g, color.b))
+        let minimum = min(color.r, min(color.g, color.b))
+        let range = maximum - minimum
+        let brightness = maximum
+        let saturation = maximum == 0 ? 0 : range / maximum
+        let hue: Double
+        if range == 0 {
+            hue = 0
+        } else if maximum == color.r {
+            hue = ((color.g - color.b) / range).truncatingRemainder(dividingBy: 6) / 6
+        } else if maximum == color.g {
+            hue = ((color.b - color.r) / range + 2) / 6
+        } else {
+            hue = ((color.r - color.g) / range + 4) / 6
+        }
+
+        return ThemePalette(
+            hue: hue >= 0 ? hue : hue + 1,
+            saturation: saturation,
+            brightness: brightness
         )
     }
 }
