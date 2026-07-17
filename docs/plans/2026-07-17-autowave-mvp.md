@@ -109,9 +109,9 @@ struct Beatmap: Codable, Sendable {
 - Produces: `TrackEntity.audioURL: URL` (resolved absolute URL used by Tasks 4/6/7).
 
 **Steps:**
-- [ ] Codex: implement; include duration read via `AVURLAsset.load(.duration)`.
-- [ ] Claude: review; build gate; tests pass.
-- [ ] Claude: commit `feat: add audio import and library screens`.
+- [x] Codex: implement; include duration read via `AVURLAsset.load(.duration)`.
+- [x] Claude: review; build gate; tests pass.
+- [x] Claude: commit `feat: add audio import and library screens`.
 
 ### Task 4: BeatmapKit analysis (decode → onsets/tempo/features)
 
