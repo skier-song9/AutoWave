@@ -478,6 +478,7 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard !hasCompleted else { return }
 
+        visualizerTap.pullLatestBands()
         updateRippleField(at: currentTime)
         let time = playbackTime()
         let misses = judgmentEngine.advance(to: time)

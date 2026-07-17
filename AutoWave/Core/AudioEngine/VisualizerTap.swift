@@ -2,6 +2,7 @@
 import Accelerate
 import Foundation
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -9,13 +10,12 @@ final class VisualizerTap {
     nonisolated static let bandCount = 16
     nonisolated static let fftSize = 1_024
     nonisolated static let tapBufferSize = AVAudioFrameCount(fftSize)
-    nonisolated static let snapshotSlotCount = 8
 
     private(set) var bands = [Float](repeating: 0, count: bandCount)
 
     @ObservationIgnored private var tapState: AudioTapState?
     @ObservationIgnored private var attachedEngine: AVAudioEngine?
-    @ObservationIgnored private var publishWorkItems: PublishWorkItems?
+    @ObservationIgnored private var lastPulledGeneration: UInt64 = 0
 
     nonisolated static func bandBinRanges(sampleRate: Float, fftSize: Int) -> [Range<Int>] {
         let lowerFrequency: Float = 40
@@ -60,23 +60,12 @@ final class VisualizerTap {
         tapState = state
         attachedEngine = engine
 
-        var workItems: [DispatchWorkItem] = []
-        workItems.reserveCapacity(Self.snapshotSlotCount)
-        for slot in 0..<Self.snapshotSlotCount {
-            workItems.append(DispatchWorkItem { @MainActor [weak self, state] in
-                self?.publishLatestBands(from: state, slot: slot)
-            })
-        }
-        let publishWorkItems = PublishWorkItems(workItems)
-        self.publishWorkItems = publishWorkItems
-
         engine.mainMixerNode.installTap(
             onBus: 0,
             bufferSize: Self.tapBufferSize,
             format: nil
-        ) { [state, publishWorkItems] buffer, _ in
-            guard let slot = state.process(buffer: buffer) else { return }
-            DispatchQueue.main.async(execute: publishWorkItems[slot])
+        ) { [state] buffer, _ in
+            state.process(buffer: buffer)
         }
     }
 
@@ -84,24 +73,17 @@ final class VisualizerTap {
         attachedEngine?.mainMixerNode.removeTap(onBus: 0)
         attachedEngine = nil
         tapState = nil
-        publishWorkItems = nil
+        lastPulledGeneration = 0
     }
 
-    private func publishLatestBands(from state: AudioTapState, slot: Int) {
-        guard tapState === state else { return }
-        state.copySnapshot(slot: slot, to: &bands)
-    }
-}
-
-private final class PublishWorkItems: @unchecked Sendable {
-    private let items: [DispatchWorkItem]
-
-    init(_ items: [DispatchWorkItem]) {
-        self.items = items
-    }
-
-    subscript(index: Int) -> DispatchWorkItem {
-        items[index]
+    func pullLatestBands() {
+        guard let tapState else { return }
+        if let generation = tapState.copyLatestSnapshot(
+            ifNewerThan: lastPulledGeneration,
+            to: &bands
+        ) {
+            lastPulledGeneration = generation
+        }
     }
 }
 
@@ -115,12 +97,13 @@ private final class AudioTapState: @unchecked Sendable {
     private let real: UnsafeMutablePointer<Float>
     private let imaginary: UnsafeMutablePointer<Float>
     private let latestBands: UnsafeMutablePointer<Float>
-    private let snapshots: UnsafeMutablePointer<Float>
+    private let latestSnapshot: UnsafeMutablePointer<Float>
 
     private var splitComplex: DSPSplitComplex
     private var processedFrames: AVAudioFramePosition = 0
     private var nextPublishFrame: AVAudioFramePosition
-    private var nextSnapshotSlot = 0
+    private var snapshotGeneration: UInt64 = 0
+    private var snapshotLock = os_unfair_lock_s()
 
     init(sampleRate: Float) {
         let validSampleRate = sampleRate > 0 ? sampleRate : 44_100
@@ -146,9 +129,7 @@ private final class AudioTapState: @unchecked Sendable {
         real = UnsafeMutablePointer<Float>.allocate(capacity: VisualizerTap.fftSize / 2)
         imaginary = UnsafeMutablePointer<Float>.allocate(capacity: VisualizerTap.fftSize / 2)
         latestBands = UnsafeMutablePointer<Float>.allocate(capacity: VisualizerTap.bandCount)
-        snapshots = UnsafeMutablePointer<Float>.allocate(
-            capacity: VisualizerTap.bandCount * VisualizerTap.snapshotSlotCount
-        )
+        latestSnapshot = UnsafeMutablePointer<Float>.allocate(capacity: VisualizerTap.bandCount)
         splitComplex = DSPSplitComplex(realp: real, imagp: imaginary)
         nextPublishFrame = AVAudioFramePosition(validSampleRate / 30)
 
@@ -160,10 +141,7 @@ private final class AudioTapState: @unchecked Sendable {
         real.initialize(repeating: 0, count: VisualizerTap.fftSize / 2)
         imaginary.initialize(repeating: 0, count: VisualizerTap.fftSize / 2)
         latestBands.initialize(repeating: 0, count: VisualizerTap.bandCount)
-        snapshots.initialize(
-            repeating: 0,
-            count: VisualizerTap.bandCount * VisualizerTap.snapshotSlotCount
-        )
+        latestSnapshot.initialize(repeating: 0, count: VisualizerTap.bandCount)
 
         vDSP_hann_window(
             window,
@@ -183,15 +161,13 @@ private final class AudioTapState: @unchecked Sendable {
         imaginary.deallocate()
         latestBands.deinitialize(count: VisualizerTap.bandCount)
         latestBands.deallocate()
-        snapshots.deinitialize(
-            count: VisualizerTap.bandCount * VisualizerTap.snapshotSlotCount
-        )
-        snapshots.deallocate()
+        latestSnapshot.deinitialize(count: VisualizerTap.bandCount)
+        latestSnapshot.deallocate()
         vDSP_destroy_fftsetup(fftSetup)
     }
 
-    func process(buffer: AVAudioPCMBuffer) -> Int? {
-        guard let channelData = buffer.floatChannelData else { return nil }
+    func process(buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData else { return }
 
         let frameCount = min(Int(buffer.frameLength), VisualizerTap.fftSize)
         let input = channelData[0]
@@ -243,28 +219,30 @@ private final class AudioTapState: @unchecked Sendable {
         }
 
         processedFrames += AVAudioFramePosition(frameCount)
-        guard processedFrames >= nextPublishFrame else { return nil }
+        guard processedFrames >= nextPublishFrame else { return }
 
         while nextPublishFrame <= processedFrames {
             nextPublishFrame += AVAudioFramePosition(sampleRate / 30)
         }
 
-        let slot = nextSnapshotSlot
-        nextSnapshotSlot = (nextSnapshotSlot + 1) % VisualizerTap.snapshotSlotCount
-        let snapshotStart = slot * VisualizerTap.bandCount
+        os_unfair_lock_lock(&snapshotLock)
         for index in 0..<VisualizerTap.bandCount {
-            snapshots[snapshotStart + index] = latestBands[index]
+            latestSnapshot[index] = latestBands[index]
         }
-        return slot
+        snapshotGeneration += 1
+        os_unfair_lock_unlock(&snapshotLock)
     }
 
-    func copySnapshot(slot: Int, to destination: inout [Float]) {
-        guard destination.count == VisualizerTap.bandCount else { return }
-        guard slot >= 0, slot < VisualizerTap.snapshotSlotCount else { return }
+    func copyLatestSnapshot(ifNewerThan generation: UInt64, to destination: inout [Float]) -> UInt64? {
+        guard destination.count == VisualizerTap.bandCount else { return nil }
 
-        let snapshotStart = slot * VisualizerTap.bandCount
+        os_unfair_lock_lock(&snapshotLock)
+        defer { os_unfair_lock_unlock(&snapshotLock) }
+
+        guard snapshotGeneration > generation else { return nil }
         for index in 0..<VisualizerTap.bandCount {
-            destination[index] = snapshots[snapshotStart + index]
+            destination[index] = latestSnapshot[index]
         }
+        return snapshotGeneration
     }
 }
