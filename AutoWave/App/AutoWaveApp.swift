@@ -19,7 +19,12 @@ struct AutoWaveApp: App {
     private static func makeModelContainer() -> ModelContainer {
         do {
             let applicationSupportURL = try ensureApplicationSupportDirectory()
-            let schema = Schema([TrackEntity.self, BeatmapEntity.self, ScoreRecord.self])
+            let schema = Schema([
+                TrackEntity.self,
+                BeatmapEntity.self,
+                ScoreRecord.self,
+                ProfileEntity.self
+            ])
             return try ModelContainer(
                 for: schema,
                 configurations: [

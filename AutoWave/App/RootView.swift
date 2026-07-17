@@ -3,7 +3,7 @@ import SwiftUI
 struct RootView: View {
     var body: some View {
         NavigationStack {
-            LibraryView()
+            HomeView()
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
