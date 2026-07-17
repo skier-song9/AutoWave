@@ -28,13 +28,18 @@ final class GameplayViewModel {
     private(set) var beatmap: Beatmap?
     private(set) var engine: JudgmentEngine?
     private(set) var saveErrorMessage: String?
+    private(set) var isPaused = false
+    private(set) var countdown: Int?
 
     @ObservationIgnored private var audioEngine: AVAudioEngine?
+    @ObservationIgnored private var audioFile: AVAudioFile?
     @ObservationIgnored private var playerNode: AVAudioPlayerNode?
     @ObservationIgnored private var visualizerTap: VisualizerTap?
     @ObservationIgnored private var gameplayScene: GameScene?
     @ObservationIgnored private var audioFinished = false
     @ObservationIgnored private var hasCompleted = false
+    @ObservationIgnored private var playbackTimeOffset: TimeInterval = 0
+    @ObservationIgnored private var countdownTask: Task<Void, Never>?
 
     init(track: TrackEntity, difficulty: Difficulty) {
         self.track = track
@@ -60,7 +65,7 @@ final class GameplayViewModel {
 
             let decodedBeatmap = try JSONDecoder().decode(Beatmap.self, from: beatmapEntity.beatmapData)
             let judgmentEngine = JudgmentEngine(notes: decodedBeatmap.notes)
-            let audioFile = try AVAudioFile(forReading: track.audioURL)
+            let newAudioFile = try AVAudioFile(forReading: track.audioURL)
             let newAudioEngine = AVAudioEngine()
             let newPlayerNode = AVAudioPlayerNode()
 
@@ -72,9 +77,9 @@ final class GameplayViewModel {
             newAudioEngine.connect(
                 newPlayerNode,
                 to: newAudioEngine.mainMixerNode,
-                format: audioFile.processingFormat
+                format: newAudioFile.processingFormat
             )
-            newPlayerNode.scheduleFile(audioFile, at: nil) { [weak self] in
+            newPlayerNode.scheduleFile(newAudioFile, at: nil) { [weak self] in
                 Task { @MainActor [weak self] in
                     self?.audioFinished = true
                 }
@@ -87,10 +92,14 @@ final class GameplayViewModel {
             beatmap = decodedBeatmap
             engine = judgmentEngine
             audioEngine = newAudioEngine
+            audioFile = newAudioFile
             playerNode = newPlayerNode
             visualizerTap = newVisualizerTap
             audioFinished = false
             hasCompleted = false
+            isPaused = false
+            countdown = nil
+            playbackTimeOffset = 0
             saveErrorMessage = nil
             gameplayScene = GameScene(
                 beatmap: decodedBeatmap,
@@ -120,17 +129,110 @@ final class GameplayViewModel {
             let playerTime = playerNode.playerTime(forNodeTime: renderTime),
             playerTime.sampleRate > 0
         else {
-            return 0
+            return playbackTimeOffset
         }
 
-        return max(Double(playerTime.sampleTime) / playerTime.sampleRate, 0)
+        return max(
+            playbackTimeOffset + Double(playerTime.sampleTime) / playerTime.sampleRate,
+            0
+        )
+    }
+
+    func pause() {
+        guard state == .ready, !isPaused else { return }
+
+        countdownTask?.cancel()
+        countdownTask = nil
+        countdown = nil
+        playbackTimeOffset = currentPlaybackTime()
+        playerNode?.stop()
+        audioEngine?.pause()
+        gameplayScene?.isPaused = true
+        isPaused = true
+    }
+
+    func resume() {
+        guard state == .ready, isPaused, countdownTask == nil else { return }
+
+        countdownTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for value in stride(from: 3, through: 1, by: -1) {
+                countdown = value
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch {
+                    return
+                }
+            }
+
+            countdown = nil
+            resumePlayback()
+            countdownTask = nil
+        }
     }
 
     func stop() {
+        countdownTask?.cancel()
+        countdownTask = nil
+        countdown = nil
+        isPaused = false
+        gameplayScene?.isPaused = false
         visualizerTap?.detach()
         playerNode?.stop()
         audioEngine?.stop()
+        audioFile = nil
         visualizerTap = nil
+    }
+
+    private func resumePlayback() {
+        guard
+            let audioFile,
+            let audioEngine,
+            let playerNode
+        else {
+            state = .failed(message: "재생을 다시 시작하지 못했어요")
+            return
+        }
+
+        let sampleRate = audioFile.processingFormat.sampleRate
+        guard sampleRate > 0 else {
+            state = .failed(message: "재생을 다시 시작하지 못했어요")
+            return
+        }
+
+        let startingFrame = min(
+            max(AVAudioFramePosition((playbackTimeOffset * sampleRate).rounded()), 0),
+            audioFile.length
+        )
+        let remainingFrames = audioFile.length - startingFrame
+        guard remainingFrames > 0 else {
+            audioFinished = true
+            isPaused = false
+            gameplayScene?.isPaused = false
+            return
+        }
+
+        audioFinished = false
+        playerNode.scheduleSegment(
+            audioFile,
+            startingFrame: startingFrame,
+            frameCount: AVAudioFrameCount(remainingFrames),
+            at: nil
+        ) { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.audioFinished = true
+            }
+        }
+
+        do {
+            try audioEngine.start()
+            playerNode.play()
+            isPaused = false
+            gameplayScene?.isPaused = false
+        } catch {
+            state = .failed(message: "재생을 다시 시작하지 못했어요")
+        }
     }
 
     private func complete(

@@ -383,6 +383,9 @@ final class GameScene: SKScene {
     private var activeDragTouchLane: Double?
     private var nextDragTickTime: TimeInterval?
     private let dragTickInterval: TimeInterval = 0.1
+    private let perfectHaptic = UIImpactFeedbackGenerator(style: .rigid)
+    private let lightHaptic = UIImpactFeedbackGenerator(style: .light)
+    private let dragBreakHaptic = UINotificationFeedbackGenerator()
 
     init(
         beatmap: Beatmap,
@@ -417,6 +420,9 @@ final class GameScene: SKScene {
 
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(white: 0.025, alpha: 1)
+        perfectHaptic.prepare()
+        lightHaptic.prepare()
+        dragBreakHaptic.prepare()
 
         backgroundOverlayNode.fillColor = paletteColor(
             saturation: CGFloat(beatmap.palette.saturation * 0.85),
@@ -721,6 +727,8 @@ final class GameScene: SKScene {
             ribbon.markScored(at: time)
         case .broken:
             ribbon.markBroken(at: time)
+            dragBreakHaptic.notificationOccurred(.warning)
+            dragBreakHaptic.prepare()
             clearActiveDrag()
         case .finished:
             ribbon.markFinished()
@@ -804,17 +812,23 @@ final class GameScene: SKScene {
         let judgmentText: String
         switch result.judgment {
         case .perfect:
-            judgmentText = "PERFECT"
+            judgmentText = "퍼펙트"
+            perfectHaptic.impactOccurred(intensity: 0.7)
+            perfectHaptic.prepare()
         case .great:
-            judgmentText = "GREAT"
+            judgmentText = "그레이트"
+            lightHaptic.impactOccurred()
+            lightHaptic.prepare()
         case .good:
-            judgmentText = "GOOD"
+            judgmentText = "굿"
+            lightHaptic.impactOccurred()
+            lightHaptic.prepare()
         case .miss:
-            judgmentText = "MISS"
+            judgmentText = "미스"
         }
 
         let label = SKLabelNode(fontNamed: "AvenirNext-Bold")
-        label.text = "\(judgmentText) · COMBO \(result.combo)"
+        label.text = "\(judgmentText) · 콤보 \(result.combo)"
         label.fontSize = 24
         label.fontColor = noteColor
         label.horizontalAlignmentMode = .center

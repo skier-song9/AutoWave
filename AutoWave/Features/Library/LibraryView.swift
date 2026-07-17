@@ -10,11 +10,18 @@ struct LibraryView: View {
     var body: some View {
         Group {
             if tracks.isEmpty {
-                ContentUnavailableView(
-                    "라이브러리가 비어 있어요",
-                    systemImage: "waveform",
-                    description: Text("음원을 가져오면 여기에 표시됩니다.")
-                )
+                ContentUnavailableView {
+                    Label("라이브러리가 비어 있어요", systemImage: "water.waves")
+                } description: {
+                    Text("음원을 가져와서 나만의 리듬게임을 만들어보세요")
+                } actions: {
+                    NavigationLink {
+                        ImportView()
+                    } label: {
+                        Text("음원 가져오기")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             } else {
                 List {
                     ForEach(tracks) { track in
@@ -137,26 +144,68 @@ private struct DifficultyPickerView: View {
     var body: some View {
         List {
             ForEach(Difficulty.allCases, id: \.rawValue) { difficulty in
-                if track.beatmaps.contains(where: { $0.difficulty == difficulty.rawValue }) {
+                let isAvailable = track.beatmaps.contains {
+                    $0.difficulty == difficulty.rawValue
+                }
+
+                if isAvailable {
                     NavigationLink {
                         GameplayContainerView(track: track, difficulty: difficulty)
                     } label: {
-                        Text(difficulty.displayName)
+                        difficultyRow(for: difficulty, isAvailable: true)
                     }
                 } else {
                     Button {
                     } label: {
-                        HStack {
-                            Text(difficulty.displayName)
-                            Spacer()
-                            Text("준비 중")
-                                .foregroundStyle(.secondary)
-                        }
+                        difficultyRow(for: difficulty, isAvailable: false)
                     }
                     .disabled(true)
                 }
             }
         }
         .navigationTitle("난이도 선택")
+    }
+
+    private func difficultyRow(for difficulty: Difficulty, isAvailable: Bool) -> some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 6)
+                .fill(difficulty.tint)
+                .frame(width: 8)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(difficulty.displayName)
+                    .font(.headline)
+                Text(difficulty.tagline)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if !isAvailable {
+                Text("준비 중")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 6)
+        .listRowBackground(difficulty.tint.opacity(0.10))
+    }
+}
+
+private extension Difficulty {
+    var tint: Color {
+        switch self {
+        case .heaven:
+            .cyan
+        case .easy:
+            .green
+        case .normal:
+            .blue
+        case .hard:
+            .orange
+        case .hell:
+            .red
+        }
     }
 }
