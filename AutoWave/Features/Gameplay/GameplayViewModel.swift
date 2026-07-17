@@ -31,6 +31,7 @@ final class GameplayViewModel {
 
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var playerNode: AVAudioPlayerNode?
+    @ObservationIgnored private var visualizerTap: VisualizerTap?
     @ObservationIgnored private var gameplayScene: GameScene?
     @ObservationIgnored private var audioFinished = false
     @ObservationIgnored private var hasCompleted = false
@@ -79,12 +80,15 @@ final class GameplayViewModel {
                 }
             }
             try newAudioEngine.start()
+            let newVisualizerTap = VisualizerTap()
+            newVisualizerTap.attach(to: newAudioEngine)
             newPlayerNode.play()
 
             beatmap = decodedBeatmap
             engine = judgmentEngine
             audioEngine = newAudioEngine
             playerNode = newPlayerNode
+            visualizerTap = newVisualizerTap
             audioFinished = false
             hasCompleted = false
             saveErrorMessage = nil
@@ -92,6 +96,7 @@ final class GameplayViewModel {
                 beatmap: decodedBeatmap,
                 difficulty: difficulty,
                 judgmentEngine: judgmentEngine,
+                visualizerTap: newVisualizerTap,
                 playbackTime: { [weak self] in
                     self?.currentPlaybackTime() ?? 0
                 },
@@ -122,8 +127,10 @@ final class GameplayViewModel {
     }
 
     func stop() {
+        visualizerTap?.detach()
         playerNode?.stop()
         audioEngine?.stop()
+        visualizerTap = nil
     }
 
     private func complete(

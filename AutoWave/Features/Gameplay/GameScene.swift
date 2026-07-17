@@ -348,8 +348,16 @@ final class GameScene: SKScene {
         }
     }
 
+    private struct RippleState {
+        var isActive = false
+        var age: TimeInterval = 0
+        var duration: TimeInterval = 2.4
+        var maxRadius: CGFloat = 0
+    }
+
     private let beatmap: Beatmap
     private let judgmentEngine: JudgmentEngine
+    private let visualizerTap: VisualizerTap
     private let playbackTime: () -> TimeInterval
     private let playbackFinished: () -> Bool
     private let onComplete: () -> Void
@@ -360,8 +368,15 @@ final class GameScene: SKScene {
     private var noteNodes: [DropletNode] = []
     private var ribbonNodes: [RibbonNode] = []
     private var separatorNodes: [SKShapeNode] = []
+    private var rippleNodes: [SKShapeNode] = []
+    private var rippleStates = Array(repeating: RippleState(), count: 6)
+    private let backgroundOverlayNode = SKShapeNode()
     private let hitLineNode = SKShapeNode()
     private var hitLineY: CGFloat = 0
+    private var nextRippleIndex = 0
+    private var nextRippleSpawnTime: TimeInterval = 0.25
+    private var sceneStartTime: TimeInterval?
+    private var lastFrameTime: TimeInterval?
     private var hasCompleted = false
     private var activeDragTouch: UITouch?
     private var activeDragNoteID: UUID?
@@ -373,12 +388,14 @@ final class GameScene: SKScene {
         beatmap: Beatmap,
         difficulty: Difficulty,
         judgmentEngine: JudgmentEngine,
+        visualizerTap: VisualizerTap,
         playbackTime: @escaping () -> TimeInterval,
         playbackFinished: @escaping () -> Bool,
         onComplete: @escaping () -> Void
     ) {
         self.beatmap = beatmap
         self.judgmentEngine = judgmentEngine
+        self.visualizerTap = visualizerTap
         self.playbackTime = playbackTime
         self.playbackFinished = playbackFinished
         self.onComplete = onComplete
@@ -399,12 +416,33 @@ final class GameScene: SKScene {
     }
 
     override func didMove(to view: SKView) {
-        backgroundColor = SKColor(
-            hue: beatmap.palette.hue,
-            saturation: min(max(beatmap.palette.saturation, 0), 1),
-            brightness: min(max(beatmap.palette.brightness * 0.35, 0), 1),
+        backgroundColor = SKColor(white: 0.025, alpha: 1)
+
+        backgroundOverlayNode.fillColor = paletteColor(
+            saturation: CGFloat(beatmap.palette.saturation * 0.85),
+            brightness: CGFloat(beatmap.palette.brightness * 0.7),
             alpha: 1
         )
+        backgroundOverlayNode.strokeColor = .clear
+        backgroundOverlayNode.zPosition = -2
+        backgroundOverlayNode.alpha = 0
+        addChild(backgroundOverlayNode)
+
+        for _ in rippleStates.indices {
+            let ripple = SKShapeNode(circleOfRadius: 1)
+            ripple.fillColor = .clear
+            ripple.strokeColor = paletteColor(
+                saturation: CGFloat(beatmap.palette.saturation * 0.75),
+                brightness: CGFloat(min(beatmap.palette.brightness * 1.2, 1)),
+                alpha: 1
+            )
+            ripple.lineWidth = 2
+            ripple.zPosition = 0.5
+            ripple.isHidden = true
+            rippleNodes.append(ripple)
+            addChild(ripple)
+        }
+        spawnRipple(bass: 0.65, mid: 0.35)
 
         addChild(hitLineNode)
         hitLineNode.zPosition = 2
@@ -434,6 +472,7 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard !hasCompleted else { return }
 
+        updateRippleField(at: currentTime)
         let time = playbackTime()
         let misses = judgmentEngine.advance(to: time)
         for miss in misses {
@@ -527,6 +566,11 @@ final class GameScene: SKScene {
     private func updateLayout() {
         guard size.width > 0, size.height > 0 else { return }
 
+        backgroundOverlayNode.path = CGPath(
+            rect: CGRect(origin: .zero, size: size),
+            transform: nil
+        )
+
         hitLineY = size.height * 0.15
         let hitLinePath = CGMutablePath()
         hitLinePath.move(to: CGPoint(x: 0, y: hitLineY))
@@ -548,10 +592,104 @@ final class GameScene: SKScene {
             separator.path = wavePath(x: size.width * CGFloat(index + 1) / 4)
         }
 
+        let rippleCenter = CGPoint(x: size.width / 2, y: size.height * 0.22)
+        for ripple in rippleNodes {
+            ripple.position = rippleCenter
+        }
+
         let laneWidth = size.width / 4
         for node in ribbonNodes {
             node.updateLayout(laneWidth: laneWidth, scrollSpeed: scrollSpeed)
         }
+    }
+
+    private func updateRippleField(at currentTime: TimeInterval) {
+        if sceneStartTime == nil {
+            sceneStartTime = currentTime
+        }
+
+        let delta = min(max(currentTime - (lastFrameTime ?? currentTime), 0), 0.1)
+        lastFrameTime = currentTime
+
+        let bands = visualizerTap.bands
+        let bass = bandMean(bands, from: 0, to: 4)
+        let mid = bandMean(bands, from: 4, to: 10)
+        let overall = bandMean(bands, from: 0, to: bands.count)
+        let washIn = min(
+            max((currentTime - (sceneStartTime ?? currentTime)) / 0.8, 0),
+            1
+        )
+        backgroundOverlayNode.alpha = max(0.025 + overall * 0.16, washIn * 0.8)
+
+        if currentTime >= nextRippleSpawnTime {
+            spawnRipple(bass: bass, mid: mid)
+            nextRippleSpawnTime = currentTime + 0.34 - bass * 0.21
+        }
+
+        for index in rippleStates.indices {
+            guard rippleStates[index].isActive else { continue }
+
+            rippleStates[index].age += delta
+            let progress = min(
+                max(rippleStates[index].age / rippleStates[index].duration, 0),
+                1
+            )
+            let ripple = rippleNodes[index]
+            if progress >= 1 {
+                rippleStates[index].isActive = false
+                ripple.isHidden = true
+                continue
+            }
+
+            ripple.isHidden = false
+            ripple.setScale(8 + rippleStates[index].maxRadius * CGFloat(progress))
+            ripple.lineWidth = 1 + mid * 3.5
+            ripple.alpha = (1 - CGFloat(progress)) * (0.18 + mid * 0.42)
+        }
+    }
+
+    private func spawnRipple(bass: CGFloat, mid: CGFloat) {
+        guard !rippleNodes.isEmpty else { return }
+
+        let index = nextRippleIndex
+        nextRippleIndex = (nextRippleIndex + 1) % rippleNodes.count
+
+        let radius = max(size.width, size.height)
+            * (0.38 + bass * 0.68)
+        rippleStates[index] = RippleState(
+            isActive: true,
+            age: 0,
+            duration: 2.1 + TimeInterval(bass) * 1.2,
+            maxRadius: radius
+        )
+        let ripple = rippleNodes[index]
+        ripple.isHidden = false
+        ripple.setScale(8)
+        ripple.lineWidth = 1 + mid * 3.5
+        ripple.alpha = 0.18 + mid * 0.42
+    }
+
+    private func bandMean(_ bands: [Float], from start: Int, to end: Int) -> CGFloat {
+        guard start < end, start >= 0, end <= bands.count else { return 0 }
+
+        var total: Float = 0
+        for index in start..<end {
+            total += bands[index]
+        }
+        return CGFloat(total / Float(end - start))
+    }
+
+    private func paletteColor(
+        saturation: CGFloat,
+        brightness: CGFloat,
+        alpha: CGFloat
+    ) -> SKColor {
+        SKColor(
+            hue: CGFloat(min(max(beatmap.palette.hue, 0), 1)),
+            saturation: min(max(saturation, 0), 1),
+            brightness: min(max(brightness, 0), 1),
+            alpha: alpha
+        )
     }
 
     private func advanceDragTicks(to time: TimeInterval) {

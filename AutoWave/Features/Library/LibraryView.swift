@@ -80,32 +80,49 @@ private struct TrackRow: View {
     let track: TrackEntity
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(track.title)
-                    .font(.headline)
-                Spacer()
-                Text(formattedDuration(track.duration))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
+        HStack(spacing: 12) {
+            Circle()
+                .fill(trackColor)
+                .frame(width: 12, height: 12)
 
-            HStack(spacing: 6) {
-                ForEach(
-                    Difficulty.allCases.filter { difficulty in
-                        track.beatmaps.contains { $0.difficulty == difficulty.rawValue }
-                    },
-                    id: \.rawValue
-                ) { difficulty in
-                    Text(difficulty.displayName)
-                        .font(.caption2)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(.tint.opacity(0.15), in: Capsule())
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(track.title)
+                        .font(.headline)
+                    Spacer()
+                    Text(formattedDuration(track.duration))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 6) {
+                    ForEach(
+                        Difficulty.allCases.filter { difficulty in
+                            track.beatmaps.contains { $0.difficulty == difficulty.rawValue }
+                        },
+                        id: \.rawValue
+                    ) { difficulty in
+                        Text(difficulty.displayName)
+                            .font(.caption2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(trackColor.opacity(0.15), in: Capsule())
+                    }
                 }
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private var trackColor: Color {
+        guard let beatmapEntity = track.beatmaps.first,
+              let beatmap = try? JSONDecoder().decode(
+                  Beatmap.self,
+                  from: beatmapEntity.beatmapData
+              ) else {
+            return .accentColor
+        }
+        return beatmap.palette.color
     }
 
     private func formattedDuration(_ duration: TimeInterval) -> String {

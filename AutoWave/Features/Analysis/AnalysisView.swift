@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 @MainActor
@@ -5,17 +6,20 @@ struct AnalysisView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: AnalysisViewModel
+    @State private var generatedPalette: ThemePalette?
 
     private let track: TrackEntity?
 
     init() {
         track = nil
         _viewModel = State(initialValue: AnalysisViewModel())
+        _generatedPalette = State(initialValue: nil)
     }
 
     init(track: TrackEntity) {
         self.track = track
         _viewModel = State(initialValue: AnalysisViewModel())
+        _generatedPalette = State(initialValue: nil)
     }
 
     var body: some View {
@@ -31,6 +35,7 @@ struct AnalysisView: View {
         .task(id: track?.persistentModelID) {
             guard let track else { return }
             await viewModel.start(track: track, context: modelContext)
+            generatedPalette = palette(for: track)
         }
     }
 
@@ -53,6 +58,8 @@ struct AnalysisView: View {
             )
         case .done:
             VStack(spacing: 24) {
+                RippleProgressView(progress: 1, tint: generatedPalette?.color ?? .accentColor)
+                    .frame(width: 140, height: 140)
                 Text("완료!")
                     .font(.largeTitle.bold())
                 Text(track.title)
@@ -69,8 +76,10 @@ struct AnalysisView: View {
                 Text(message)
                     .font(.headline)
                 Button("다시 시도") {
+                    generatedPalette = nil
                     Task { @MainActor in
                         await viewModel.start(track: track, context: modelContext)
+                        generatedPalette = palette(for: track)
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -82,7 +91,10 @@ struct AnalysisView: View {
 
     private func progressContent(title: String, detail: String, progress: Double) -> some View {
         VStack(spacing: 24) {
-            RippleProgressView(progress: progress)
+            RippleProgressView(
+                progress: progress,
+                tint: generatedPalette?.color ?? .accentColor
+            )
                 .frame(width: 180, height: 180)
             Text(title)
                 .font(.title3.weight(.semibold))
@@ -94,6 +106,17 @@ struct AnalysisView: View {
         .padding()
     }
 
+    private func palette(for track: TrackEntity) -> ThemePalette? {
+        guard let beatmap = track.beatmaps.first else { return nil }
+        guard let decoded = try? JSONDecoder().decode(
+            Beatmap.self,
+            from: beatmap.beatmapData
+        ) else {
+            return nil
+        }
+        return decoded.palette
+    }
+
     private func percentage(_ progress: Double) -> Int {
         Int((min(max(progress, 0), 1) * 100).rounded())
     }
@@ -101,13 +124,14 @@ struct AnalysisView: View {
 
 private struct RippleProgressView: View {
     let progress: Double
+    let tint: Color
     @State private var isAnimating = false
 
     var body: some View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .stroke(.tint.opacity(0.25 + Double(2 - index) * 0.1), lineWidth: 2)
+                    .stroke(tint.opacity(0.25 + Double(2 - index) * 0.1), lineWidth: 2)
                     .scaleEffect(isAnimating ? 1.2 : 0.35)
                     .opacity(isAnimating ? 0 : 0.9)
                     .animation(
@@ -119,11 +143,11 @@ private struct RippleProgressView: View {
             }
 
             Circle()
-                .fill(.tint.opacity(0.12))
+                .fill(tint.opacity(0.12))
                 .overlay {
                     Circle()
                         .trim(from: 0, to: progress)
-                        .stroke(.tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                 }
                 .padding(28)
