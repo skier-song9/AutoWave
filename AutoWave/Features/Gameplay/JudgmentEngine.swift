@@ -154,6 +154,19 @@ final class JudgmentEngine: @unchecked Sendable {
     func advance(to time: TimeInterval) -> [JudgmentResult] {
         var results: [JudgmentResult] = []
 
+        advance(to: time) { result in
+            results.append(result)
+        }
+        return results
+    }
+
+    @discardableResult
+    func advance(
+        to time: TimeInterval,
+        onResult: (JudgmentResult) -> Void
+    ) -> Int {
+        var resultCount = 0
+
         for index in pendingNotes.indices where !pendingNotes[index].consumed {
             let elapsed = time - pendingNotes[index].note.time
             guard elapsed > Window.bad + Window.comparisonEpsilon else {
@@ -161,7 +174,8 @@ final class JudgmentEngine: @unchecked Sendable {
             }
 
             pendingNotes[index].consumed = true
-            results.append(recordMiss())
+            onResult(recordMiss())
+            resultCount += 1
         }
 
         for index in dragStates.indices where dragStates[index].lifecycle == .pending {
@@ -171,10 +185,11 @@ final class JudgmentEngine: @unchecked Sendable {
             }
 
             dragStates[index].lifecycle = .inactive
-            results.append(recordMiss())
+            onResult(recordMiss())
+            resultCount += 1
         }
 
-        return results
+        return resultCount
     }
 
     private func award(judgment: Judgment) -> JudgmentResult {

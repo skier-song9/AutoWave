@@ -22,7 +22,6 @@ final class GameScene: SKScene, @unchecked Sendable {
         let note: Note
 
         private let body = SKShapeNode()
-        private let timingGuide = SKShapeNode()
         private let noteHeight: CGFloat = 22
         private let cornerRadius: CGFloat = 8
 
@@ -36,11 +35,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             body.strokeColor = strokeColor
             body.lineWidth = 2
 
-            timingGuide.fillColor = .clear
-            timingGuide.strokeColor = fillColor.withAlphaComponent(0.8)
-            timingGuide.lineWidth = 2
-
-            addChild(timingGuide)
             addChild(body)
             zPosition = 3
         }
@@ -64,15 +58,14 @@ final class GameScene: SKScene, @unchecked Sendable {
                 transform: nil
             )
             body.path = path
-            timingGuide.path = path
         }
 
         func update(
             playbackTime: TimeInterval,
             hitLineY: CGFloat,
+            laneOriginX: CGFloat,
             laneWidth: CGFloat,
             scrollSpeed: CGFloat,
-            ringWindow: TimeInterval,
             sceneHeight: CGFloat
         ) {
             let timeToHit = note.time - playbackTime
@@ -91,12 +84,9 @@ final class GameScene: SKScene, @unchecked Sendable {
 
             isHidden = false
             position = CGPoint(
-                x: (CGFloat(note.lane) + 0.5) * laneWidth,
+                x: laneOriginX + (CGFloat(note.lane) + 0.5) * laneWidth,
                 y: y
             )
-
-            let progress = min(max(timeToHit / ringWindow, 0), 1)
-            timingGuide.setScale(1 + 1.6 * CGFloat(progress))
         }
     }
 
@@ -136,6 +126,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         private var state: State = .pending
         private var fingerOn = false
         private var spinePoints: [SpinePoint] = []
+        private var laneOriginX: CGFloat = 0
         private var laneWidth: CGFloat = 0
         private var scrollSpeed: CGFloat = 0
         private var breakOffset: TimeInterval?
@@ -199,7 +190,8 @@ final class GameScene: SKScene, @unchecked Sendable {
                 && abs(touchLane - lane(at: 0)) <= 0.6
         }
 
-        func updateLayout(laneWidth: CGFloat, scrollSpeed: CGFloat) {
+        func updateLayout(laneOriginX: CGFloat, laneWidth: CGFloat, scrollSpeed: CGFloat) {
+            self.laneOriginX = laneOriginX
             self.laneWidth = laneWidth
             self.scrollSpeed = scrollSpeed
             band.lineWidth = laneWidth * 0.45
@@ -329,7 +321,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             SpinePoint(
                 offset: offset,
                 point: CGPoint(
-                    x: (CGFloat(lane(at: offset)) + 0.5) * laneWidth,
+                    x: laneOriginX + (CGFloat(lane(at: offset)) + 0.5) * laneWidth,
                     y: -CGFloat(offset) * scrollSpeed
                 )
             )
@@ -435,6 +427,100 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
     }
 
+    private final class HitPopNode: SKNode {
+        private let ring = SKShapeNode()
+        private let particles: [SKShapeNode]
+        private let directions: [CGVector]
+        private var age: TimeInterval = 0
+        private var intensity: CGFloat = 1
+        private var isActive = false
+
+        init(color: SKColor) {
+            directions = (0..<6).map { index in
+                let angle = Double(index) * .pi / 3
+                return CGVector(dx: CGFloat(cos(angle)), dy: CGFloat(sin(angle)))
+            }
+            particles = (0..<6).map { _ in
+                let particle = SKShapeNode(circleOfRadius: 2)
+                particle.fillColor = color
+                particle.strokeColor = .clear
+                particle.isHidden = true
+                return particle
+            }
+            super.init()
+
+            ring.fillColor = color.withAlphaComponent(0.12)
+            ring.strokeColor = color
+            ring.lineWidth = 2
+            addChild(ring)
+            for particle in particles {
+                addChild(particle)
+            }
+            zPosition = 8
+            isHidden = true
+        }
+
+        required init?(coder aDecoder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func updateLayout(noteWidth: CGFloat) {
+            ring.path = CGPath(
+                roundedRect: CGRect(
+                    x: -noteWidth / 2,
+                    y: -11,
+                    width: noteWidth,
+                    height: 22
+                ),
+                cornerWidth: 8,
+                cornerHeight: 8,
+                transform: nil
+            )
+        }
+
+        func trigger(at point: CGPoint, intensity: CGFloat) {
+            self.intensity = intensity
+            age = 0
+            isActive = true
+            isHidden = false
+            position = point
+            ring.alpha = 1
+            ring.setScale(1)
+            for particle in particles {
+                particle.position = .zero
+                particle.alpha = 1
+                particle.setScale(1)
+                particle.isHidden = false
+            }
+        }
+
+        func update(delta: TimeInterval) {
+            guard isActive else { return }
+
+            age += delta
+            let progress = min(max(age / 0.32, 0), 1)
+            let fade = CGFloat(1 - progress)
+            ring.setScale(1 + 2.4 * CGFloat(progress) * intensity)
+            ring.alpha = fade
+
+            let distance = 34 * CGFloat(progress)
+            for index in particles.indices {
+                let direction = directions[index]
+                particles[index].position = CGPoint(
+                    x: direction.dx * distance,
+                    y: direction.dy * distance
+                )
+                particles[index].alpha = fade
+            }
+
+            guard progress < 1 else {
+                isActive = false
+                isHidden = true
+                return
+            }
+        }
+    }
+
     private struct RippleState {
         var isActive = false
         var age: TimeInterval = 0
@@ -447,7 +533,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let visualizerTap: VisualizerTap
     private let playbackTime: @Sendable () -> TimeInterval
     private let playbackFinished: @Sendable () -> Bool
-    private let onComplete: () -> Void
+    private let onComplete: (Bool) -> Void
     private let onHaptic: (GameplayHaptic) -> Void
     private let theme: GameTheme
     private let tapNoteColor: SKColor
@@ -459,6 +545,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let judgmentAccentColor: SKColor
     private let scrollSpeed: CGFloat
     private let lastNoteTime: TimeInterval?
+    private let laneCount: Int
 
     private var noteNodes: [TapNoteNode] = []
     private var ribbonNodes: [RibbonNode] = []
@@ -466,11 +553,23 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var laneFillNodes: [SKShapeNode] = []
     private var boundaryNodes: [SKShapeNode] = []
     private var receptorNodes: [SKShapeNode] = []
-    private var receptorFlashRemaining = Array(repeating: TimeInterval.zero, count: 4)
+    private var receptorFlashRemaining: [TimeInterval] = []
+    private var hitPopNodes: [HitPopNode] = []
     private var rippleNodes: [SKShapeNode] = []
     private var rippleStates = Array(repeating: RippleState(), count: 6)
     private let backgroundOverlayNode = SKShapeNode()
     private let hitLineNode = SKShapeNode()
+    private let comboCaptionLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let comboValueLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let latestJudgmentLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let scoreCaptionLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let scoreValueLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let lifeCaptionLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let lifeGaugeTrack = SKShapeNode()
+    private let lifeGaugeFill = SKShapeNode()
+    private let gameOverLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private var laneAreaRect = CGRect.zero
+    private var laneWidth: CGFloat = 0
     private var hitLineY: CGFloat = 0
     private var nextRippleIndex = 0
     private var nextRippleSpawnTime: TimeInterval = 0.25
@@ -484,6 +583,15 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var activeDragTouchLane: Double?
     private var nextDragTickTime: TimeInterval?
     private let dragTickInterval: TimeInterval = 0.1
+    private var nextHitPopIndex = 0
+    private var lastRenderedCombo: Int?
+    private var lastRenderedScore: Int?
+    private var lastRenderedLife: Int?
+    private var comboPulseRemaining: TimeInterval = 0
+    private var gameOverFlashRemaining: TimeInterval = 0
+    private var isGameOverPending = false
+    private var lastFrameDelta: TimeInterval = 0
+    private let gameOverFlashDuration: TimeInterval = 0.32
     init(
         beatmap: Beatmap,
         difficulty: Difficulty,
@@ -491,7 +599,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         visualizerTap: VisualizerTap,
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool,
-        onComplete: @escaping () -> Void,
+        onComplete: @escaping (Bool) -> Void,
         onHaptic: @escaping (GameplayHaptic) -> Void
     ) {
         self.beatmap = beatmap
@@ -512,6 +620,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
         lastNoteTime = beatmap.notes.map(\.time).max()
+        laneCount = min(max(beatmap.laneCount, 4), 7)
         super.init(size: CGSize(width: 1, height: 1))
         scaleMode = .resizeFill
     }
@@ -555,7 +664,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         hitLineNode.strokeColor = laneLineColor
         hitLineNode.lineWidth = 1
 
-        for _ in 0..<4 {
+        receptorFlashRemaining = Array(repeating: .zero, count: laneCount)
+        for _ in 0..<laneCount {
             let lane = SKShapeNode()
             lane.fillColor = makeColor(for: theme.laneFill)
             lane.strokeColor = .clear
@@ -572,13 +682,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             addChild(receptor)
         }
 
-        for _ in 0..<5 {
+        for _ in 0...laneCount {
             let boundary = SKShapeNode()
             boundary.strokeColor = laneLineColor
             boundary.lineWidth = 1
             boundary.zPosition = 1
             boundaryNodes.append(boundary)
             addChild(boundary)
+        }
+
+        for _ in 0..<8 {
+            let hitPop = HitPopNode(color: judgmentAccentColor)
+            hitPopNodes.append(hitPop)
+            addChild(hitPop)
         }
 
         for note in beatmap.notes where note.kind == .tap {
@@ -602,7 +718,77 @@ final class GameScene: SKScene, @unchecked Sendable {
             addChild(node)
         }
 
+        configureHUD()
         updateLayout()
+    }
+
+    private func configureHUD() {
+        comboCaptionLabel.text = "콤보"
+        comboCaptionLabel.fontSize = 13
+        comboCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
+        comboCaptionLabel.horizontalAlignmentMode = .center
+        comboCaptionLabel.verticalAlignmentMode = .center
+        comboCaptionLabel.zPosition = 12
+
+        comboValueLabel.text = "0"
+        comboValueLabel.fontSize = 34
+        comboValueLabel.fontColor = .white
+        comboValueLabel.horizontalAlignmentMode = .center
+        comboValueLabel.verticalAlignmentMode = .center
+        comboValueLabel.zPosition = 12
+
+        latestJudgmentLabel.fontSize = 16
+        latestJudgmentLabel.fontColor = judgmentAccentColor
+        latestJudgmentLabel.horizontalAlignmentMode = .center
+        latestJudgmentLabel.verticalAlignmentMode = .center
+        latestJudgmentLabel.zPosition = 12
+
+        scoreCaptionLabel.text = "점수"
+        scoreCaptionLabel.fontSize = 12
+        scoreCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
+        scoreCaptionLabel.horizontalAlignmentMode = .center
+        scoreCaptionLabel.verticalAlignmentMode = .center
+        scoreCaptionLabel.zPosition = 12
+
+        scoreValueLabel.text = "0"
+        scoreValueLabel.fontSize = 22
+        scoreValueLabel.fontColor = .white
+        scoreValueLabel.horizontalAlignmentMode = .center
+        scoreValueLabel.verticalAlignmentMode = .center
+        scoreValueLabel.zPosition = 12
+
+        lifeCaptionLabel.text = "체력"
+        lifeCaptionLabel.fontSize = 12
+        lifeCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
+        lifeCaptionLabel.horizontalAlignmentMode = .center
+        lifeCaptionLabel.verticalAlignmentMode = .center
+        lifeCaptionLabel.zPosition = 12
+
+        lifeGaugeTrack.fillColor = .white.withAlphaComponent(0.12)
+        lifeGaugeTrack.strokeColor = .white.withAlphaComponent(0.5)
+        lifeGaugeTrack.lineWidth = 1
+        lifeGaugeTrack.zPosition = 12
+
+        lifeGaugeFill.strokeColor = .clear
+        lifeGaugeFill.zPosition = 13
+
+        gameOverLabel.text = "게임 오버"
+        gameOverLabel.fontSize = 38
+        gameOverLabel.fontColor = judgmentAccentColor
+        gameOverLabel.horizontalAlignmentMode = .center
+        gameOverLabel.verticalAlignmentMode = .center
+        gameOverLabel.zPosition = 14
+        gameOverLabel.isHidden = true
+
+        addChild(comboCaptionLabel)
+        addChild(comboValueLabel)
+        addChild(latestJudgmentLabel)
+        addChild(scoreCaptionLabel)
+        addChild(scoreValueLabel)
+        addChild(lifeCaptionLabel)
+        addChild(lifeGaugeTrack)
+        addChild(lifeGaugeFill)
+        addChild(gameOverLabel)
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -613,33 +799,39 @@ final class GameScene: SKScene, @unchecked Sendable {
     override func update(_ currentTime: TimeInterval) {
         guard !hasCompleted else { return }
 
+        let delta = frameDelta(at: currentTime)
+        if isGameOverPending {
+            updateGameOverFlash(delta: delta)
+            return
+        }
+
         if let generation = visualizerTap.copyLatestSnapshot(
             ifNewerThan: visualizerGeneration,
             to: &visualizerBands
         ) {
             visualizerGeneration = generation
         }
-        updateRippleField(at: currentTime)
+        updateRippleField(at: currentTime, delta: delta)
         let time = playbackTime()
-        let misses = judgmentEngine.advance(to: time)
-        for miss in misses {
-            showJudgment(miss)
+        judgmentEngine.advance(to: time) { [self] result in
+            showJudgment(result)
         }
 
         advanceDragTicks(to: time)
+        updateHUD()
 
-        let ringWindow = max(
-            TimeInterval(max(size.height - hitLineY, 0)) / TimeInterval(scrollSpeed),
-            0.1
-        )
-        let laneWidth = size.width / 4
+        if judgmentEngine.isGameOver {
+            beginGameOver()
+            return
+        }
+
         for node in noteNodes {
             node.update(
                 playbackTime: time,
                 hitLineY: hitLineY,
+                laneOriginX: laneAreaRect.minX,
                 laneWidth: laneWidth,
                 scrollSpeed: scrollSpeed,
-                ringWindow: ringWindow,
                 sceneHeight: size.height
             )
         }
@@ -653,7 +845,7 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         if playbackFinished() || (lastNoteTime.map { time >= $0 + 2 } ?? false) {
             hasCompleted = true
-            onComplete()
+            onComplete(false)
         }
     }
 
@@ -675,16 +867,16 @@ final class GameScene: SKScene, @unchecked Sendable {
             activeDragTouch = touch
             activeDragNoteID = ribbon.note.id
             activeDragTouchLane = touchLane
-            let lane = min(max(Int(ribbon.note.lane.rounded()), 0), 3)
+            let lane = laneIndex(for: ribbon.note.lane)
             flashReceptor(lane)
             showJudgment(result)
             if result.judgment != .miss {
-                showSplash(at: CGPoint(x: (CGFloat(lane) + 0.5) * size.width / 4, y: hitLineY))
+                showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
             }
             return
         }
 
-        let lane = min(max(Int(location.x / (size.width / 4)), 0), 3)
+        let lane = laneIndex(for: location)
 
         guard let result = judgmentEngine.tap(lane: lane, at: time) else { return }
 
@@ -692,7 +884,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         showJudgment(result)
         if result.judgment != .miss {
             flashReceptor(lane)
-            showSplash(at: CGPoint(x: (CGFloat(lane) + 0.5) * size.width / 4, y: hitLineY))
+            showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
         }
     }
 
@@ -730,12 +922,23 @@ final class GameScene: SKScene, @unchecked Sendable {
             transform: nil
         )
 
-        let laneWidth = size.width / 4
+        let sideGutter = min(max(size.width * 0.12, 72), 110)
+        let usableWidth = min(
+            size.width,
+            max(size.width - sideGutter * 2, size.width * 0.55)
+        )
+        laneAreaRect = CGRect(
+            x: (size.width - usableWidth) / 2,
+            y: 0,
+            width: usableWidth,
+            height: size.height
+        )
+        laneWidth = usableWidth / CGFloat(laneCount)
         let laneFillColor = makeColor(for: theme.laneFill)
         for (index, lane) in laneFillNodes.enumerated() {
             lane.path = CGPath(
                 rect: CGRect(
-                    x: CGFloat(index) * laneWidth,
+                    x: laneAreaRect.minX + CGFloat(index) * laneWidth,
                     y: 0,
                     width: laneWidth,
                     height: size.height
@@ -750,13 +953,13 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         hitLineY = size.height * 0.12
         let hitLinePath = CGMutablePath()
-        hitLinePath.move(to: CGPoint(x: 0, y: hitLineY))
-        hitLinePath.addLine(to: CGPoint(x: size.width, y: hitLineY))
+        hitLinePath.move(to: CGPoint(x: laneAreaRect.minX, y: hitLineY))
+        hitLinePath.addLine(to: CGPoint(x: laneAreaRect.maxX, y: hitLineY))
         hitLineNode.path = hitLinePath
 
         for (index, boundary) in boundaryNodes.enumerated() {
             let path = CGMutablePath()
-            let x = CGFloat(index) * laneWidth
+            let x = laneAreaRect.minX + CGFloat(index) * laneWidth
             path.move(to: CGPoint(x: x, y: 0))
             path.addLine(to: CGPoint(x: x, y: size.height))
             boundary.path = path
@@ -780,39 +983,76 @@ final class GameScene: SKScene, @unchecked Sendable {
         for (index, receptor) in receptorNodes.enumerated() {
             receptor.path = receptorPath
             receptor.position = CGPoint(
-                x: (CGFloat(index) + 0.5) * laneWidth,
+                x: laneAreaRect.minX + (CGFloat(index) + 0.5) * laneWidth,
                 y: hitLineY
             )
             receptor.strokeColor = laneLineColor
             receptor.alpha = 1
         }
 
-        let rippleCenter = CGPoint(x: size.width / 2, y: size.height * 0.22)
+        let rippleCenter = CGPoint(x: laneAreaRect.midX, y: size.height * 0.22)
         for ripple in rippleNodes {
             ripple.position = rippleCenter
         }
+
+        comboCaptionLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - 20)
+        comboValueLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - 54)
+        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - 78)
+        scoreCaptionLabel.position = CGPoint(x: laneAreaRect.minX / 2, y: size.height * 0.10 + 16)
+        scoreValueLabel.position = CGPoint(x: laneAreaRect.minX / 2, y: size.height * 0.10 - 10)
+
+        let lifeCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
+        let gaugeHeight = min(max(size.height * 0.45, 100), 190)
+        let gaugeBottom = size.height * 0.18
+        let gaugePath = CGPath(
+            roundedRect: CGRect(x: -8, y: 0, width: 16, height: gaugeHeight),
+            cornerWidth: 8,
+            cornerHeight: 8,
+            transform: nil
+        )
+        lifeGaugeTrack.path = gaugePath
+        lifeGaugeTrack.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
+        lifeGaugeFill.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
+        lifeCaptionLabel.position = CGPoint(x: lifeCenterX, y: gaugeBottom + gaugeHeight + 16)
+        gameOverLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height * 0.52)
 
         for node in noteNodes {
             node.updateLayout(laneWidth: laneWidth)
         }
         for node in ribbonNodes {
-            node.updateLayout(laneWidth: laneWidth, scrollSpeed: scrollSpeed)
+            node.updateLayout(
+                laneOriginX: laneAreaRect.minX,
+                laneWidth: laneWidth,
+                scrollSpeed: scrollSpeed
+            )
         }
+        for node in hitPopNodes {
+            node.updateLayout(noteWidth: laneWidth * 0.62)
+        }
+
+        updateHUD()
     }
 
-    private func updateRippleField(at currentTime: TimeInterval) {
+    private func frameDelta(at currentTime: TimeInterval) -> TimeInterval {
+        let delta = min(max(currentTime - (lastFrameTime ?? currentTime), 0), 0.1)
+        lastFrameTime = currentTime
+        lastFrameDelta = delta
+        return delta
+    }
+
+    private func updateRippleField(at currentTime: TimeInterval, delta: TimeInterval) {
         if sceneStartTime == nil {
             sceneStartTime = currentTime
         }
 
-        let delta = min(max(currentTime - (lastFrameTime ?? currentTime), 0), 0.1)
-        lastFrameTime = currentTime
         updateReceptorFlashes(delta: delta)
+        for hitPop in hitPopNodes {
+            hitPop.update(delta: delta)
+        }
 
-        let bands = visualizerBands
-        let bass = bandMean(bands, from: 0, to: 4)
-        let mid = bandMean(bands, from: 4, to: 10)
-        let overall = bandMean(bands, from: 0, to: bands.count)
+        let bass = bandMean(visualizerBands, from: 0, to: 4)
+        let mid = bandMean(visualizerBands, from: 4, to: 10)
+        let overall = bandMean(visualizerBands, from: 0, to: visualizerBands.count)
         let washIn = min(
             max((currentTime - (sceneStartTime ?? currentTime)) / 0.8, 0),
             1
@@ -971,7 +1211,24 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private func laneCoordinate(for point: CGPoint) -> Double {
-        Double(point.x / (size.width / 4) - 0.5)
+        guard laneWidth > 0 else { return 0 }
+        let x = min(max(point.x, laneAreaRect.minX), laneAreaRect.maxX)
+        return Double((x - laneAreaRect.minX) / laneWidth - 0.5)
+    }
+
+    private func laneIndex(for point: CGPoint) -> Int {
+        laneIndex(for: laneCoordinate(for: point))
+    }
+
+    private func laneIndex(for coordinate: Double) -> Int {
+        min(max(Int(coordinate.rounded()), 0), laneCount - 1)
+    }
+
+    private func receptorPoint(for lane: Int) -> CGPoint {
+        CGPoint(
+            x: laneAreaRect.minX + (CGFloat(lane) + 0.5) * laneWidth,
+            y: hitLineY
+        )
     }
 
     private func updateEndedDragTouch(in touches: Set<UITouch>) {
@@ -1025,66 +1282,107 @@ final class GameScene: SKScene, @unchecked Sendable {
             judgmentText = "미스"
         }
 
-        let label = SKLabelNode(fontNamed: "AvenirNext-Bold")
-        label.text = "\(judgmentText) · 콤보 \(result.combo)"
-        label.fontSize = 24
-        label.fontColor = judgmentAccentColor
-        label.horizontalAlignmentMode = .center
-        label.verticalAlignmentMode = .center
-        label.position = CGPoint(x: size.width / 2, y: size.height / 2)
-        label.zPosition = 10
-        label.alpha = 0
-        addChild(label)
-
-        let show = SKAction.fadeIn(withDuration: 0.05)
-        let hide = SKAction.sequence([
-            .wait(forDuration: 0.45),
-            .fadeOut(withDuration: 0.25),
-            .removeFromParent()
-        ])
-        label.run(.sequence([show, hide]))
+        latestJudgmentLabel.text = judgmentText
+        latestJudgmentLabel.alpha = 1
+        comboPulseRemaining = 0.18
+        comboValueLabel.setScale(1.12)
     }
 
-    private func showSplash(at point: CGPoint) {
-        let ripple = SKShapeNode(
-            rectOf: CGSize(width: size.width / 4 * 0.62, height: 22),
-            cornerRadius: 8
-        )
-        ripple.position = point
-        ripple.strokeColor = judgmentAccentColor
-        ripple.fillColor = .clear
-        ripple.lineWidth = 2
-        ripple.zPosition = 8
-        addChild(ripple)
-        ripple.run(.sequence([
-            .group([
-                .scale(to: 3.5, duration: 0.3),
-                .fadeOut(withDuration: 0.3)
-            ]),
-            .removeFromParent()
-        ]))
+    private func showHitPop(at point: CGPoint, judgment: Judgment) {
+        guard !hitPopNodes.isEmpty else { return }
 
-        for index in 0..<8 {
-            let particle = SKShapeNode(circleOfRadius: 2)
-            particle.position = point
-            particle.fillColor = judgmentAccentColor
-            particle.strokeColor = .clear
-            particle.zPosition = 8
-            addChild(particle)
-
-            let angle = Double(index) * .pi / 4
-            let distance: CGFloat = 34
-            let destination = CGVector(
-                dx: cos(angle) * Double(distance),
-                dy: sin(angle) * Double(distance)
-            )
-            particle.run(.sequence([
-                .group([
-                    .move(by: destination, duration: 0.32),
-                    .fadeOut(withDuration: 0.32)
-                ]),
-                .removeFromParent()
-            ]))
+        let intensity: CGFloat
+        switch judgment {
+        case .perfect:
+            intensity = 1
+        case .great:
+            intensity = 0.86
+        case .good:
+            intensity = 0.7
+        case .bad, .miss:
+            intensity = 0.55
         }
+
+        hitPopNodes[nextHitPopIndex].trigger(at: point, intensity: intensity)
+        nextHitPopIndex = (nextHitPopIndex + 1) % hitPopNodes.count
+    }
+
+    private func updateHUD() {
+        let combo = judgmentEngine.combo
+        if combo != lastRenderedCombo {
+            comboValueLabel.text = "\(combo)"
+            lastRenderedCombo = combo
+        }
+
+        let score = judgmentEngine.score
+        if score != lastRenderedScore {
+            scoreValueLabel.text = "\(score)"
+            lastRenderedScore = score
+        }
+
+        let life = judgmentEngine.life
+        if life != lastRenderedLife {
+            let fraction = CGFloat(min(max(life, 0), 100)) / 100
+            let bounds = lifeGaugeTrack.path?.boundingBox ?? .zero
+            lifeGaugeFill.path = CGPath(
+                roundedRect: CGRect(
+                    x: bounds.minX,
+                    y: bounds.minY,
+                    width: bounds.width,
+                    height: bounds.height * fraction
+                ),
+                cornerWidth: 8,
+                cornerHeight: 8,
+                transform: nil
+            )
+            lifeGaugeFill.fillColor = lifeGaugeColor(for: fraction)
+            lifeGaugeFill.isHidden = life <= 0
+            lastRenderedLife = life
+        }
+
+        comboPulseRemaining = max(comboPulseRemaining - lastFrameDelta, 0)
+        let pulse = comboPulseRemaining / 0.18
+        comboValueLabel.setScale(1 + 0.12 * CGFloat(pulse))
+    }
+
+    private func lifeGaugeColor(for fraction: CGFloat) -> SKColor {
+        if fraction >= 0.5 {
+            let progress = (fraction - 0.5) * 2
+            return SKColor(
+                red: 1 - 0.8 * progress,
+                green: 0.72 + 0.18 * progress,
+                blue: 0.18 + 0.17 * progress,
+                alpha: 1
+            )
+        }
+
+        let progress = fraction * 2
+        return SKColor(
+            red: 1,
+            green: 0.12 + 0.60 * progress,
+            blue: 0.10 + 0.08 * progress,
+            alpha: 1
+        )
+    }
+
+    private func beginGameOver() {
+        guard !isGameOverPending else { return }
+        isGameOverPending = true
+        gameOverFlashRemaining = gameOverFlashDuration
+        gameOverLabel.isHidden = false
+        gameOverLabel.alpha = 1
+        gameOverLabel.setScale(1)
+    }
+
+    private func updateGameOverFlash(delta: TimeInterval) {
+        gameOverFlashRemaining = max(gameOverFlashRemaining - delta, 0)
+        let progress = 1 - gameOverFlashRemaining / gameOverFlashDuration
+        gameOverLabel.alpha = CGFloat(max(0, 1 - progress))
+        gameOverLabel.setScale(1 + 0.18 * CGFloat(progress))
+
+        guard gameOverFlashRemaining == 0 else { return }
+
+        hasCompleted = true
+        onComplete(true)
     }
 }

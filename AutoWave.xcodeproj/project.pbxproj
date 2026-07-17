@@ -28,6 +28,7 @@
 		5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB38A448795557AE2574814B /* AudioImportService.swift */; };
 		5D444F02E57A0AB02CF727A6 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05BDC228E3F5731F216AE1AB /* ProfileView.swift */; };
 		6DBB1DA40153D4511D06DF93 /* AudioDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83440EAB2298E997D7782708 /* AudioDecoder.swift */; };
+		733641CB359AF96AC1A84801 /* GameplaySummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2352FEEDCB5DFCC346E973 /* GameplaySummaryTests.swift */; };
 		74CA114E342806F12686B95E /* AnalysisView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9AECF34B918B3699EABF5D3 /* AnalysisView.swift */; };
 		7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8C42ADB583CB236F8EDBF3 /* AutoWaveApp.swift */; };
 		813B1FBCCAE47915D56086F2 /* JudgmentEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0028499C135D1D095F766C2A /* JudgmentEngine.swift */; };
@@ -100,6 +101,7 @@
 		AF5D751B151161690EDDFEA7 /* ImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportView.swift; sourceTree = "<group>"; };
 		B2566011226FE45AC21A6643 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B838024FE85D54086054056C /* Difficulty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Difficulty.swift; sourceTree = "<group>"; };
+		BE2352FEEDCB5DFCC346E973 /* GameplaySummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplaySummaryTests.swift; sourceTree = "<group>"; };
 		C96472A1EC16937AB76ADB76 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		C9AECF34B918B3699EABF5D3 /* AnalysisView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisView.swift; sourceTree = "<group>"; };
 		CBDE3DE53FA697705BD3BF15 /* ProfileEntityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEntityTests.swift; sourceTree = "<group>"; };
@@ -269,6 +271,7 @@
 				7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */,
 				22C329DC7FC347641216CC9D /* EndToEndPipelineTests.swift */,
 				52A1B76159F17CA25DC0A39B /* GameplayStartRegressionTests.swift */,
+				BE2352FEEDCB5DFCC346E973 /* GameplaySummaryTests.swift */,
 				5669E62DC438C49A5F39AE5F /* JudgmentEngineTests.swift */,
 				ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */,
 				CBDE3DE53FA697705BD3BF15 /* ProfileEntityTests.swift */,
@@ -379,6 +382,7 @@
 				172A6F44EF074B2507A1DE2F /* BeatmapKitAnalysisTests.swift in Sources */,
 				1E0A10A7CE016CF9F1A98387 /* EndToEndPipelineTests.swift in Sources */,
 				39F78B8DF8EAF05F04C4D76D /* GameplayStartRegressionTests.swift in Sources */,
+				733641CB359AF96AC1A84801 /* GameplaySummaryTests.swift in Sources */,
 				0DA17E97E776CA4019BC9342 /* JudgmentEngineTests.swift in Sources */,
 				468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */,
 				57FEEC0ABFCB98D0E67F0AD6 /* ProfileEntityTests.swift in Sources */,

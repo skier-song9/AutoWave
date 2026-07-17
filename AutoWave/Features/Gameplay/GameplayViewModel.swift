@@ -10,6 +10,7 @@ struct GameplaySummary: Equatable, Identifiable, Sendable {
     let score: Int
     let maxCombo: Int
     let judgmentCounts: JudgmentCounts
+    let failed: Bool
 }
 
 final class PlaybackClock: @unchecked Sendable {
@@ -164,9 +165,13 @@ final class GameplayViewModel {
                 playbackFinished: {
                     clock.isFinished
                 },
-                onComplete: { [weak self] in
+                onComplete: { [weak self] failed in
                     Task { @MainActor [weak self] in
-                        self?.complete(context: context, onComplete: onComplete)
+                        self?.complete(
+                            context: context,
+                            failed: failed,
+                            onComplete: onComplete
+                        )
                     }
                 },
                 onHaptic: { [weak self] event in
@@ -287,6 +292,7 @@ final class GameplayViewModel {
 
     private func complete(
         context: ModelContext,
+        failed: Bool,
         onComplete: @escaping (GameplaySummary) -> Void
     ) {
         guard !hasCompleted, let engine else { return }
@@ -297,7 +303,8 @@ final class GameplayViewModel {
         let summary = GameplaySummary(
             score: engine.score,
             maxCombo: engine.maxCombo,
-            judgmentCounts: engine.judgmentCounts
+            judgmentCounts: engine.judgmentCounts,
+            failed: failed || engine.isGameOver
         )
         let record = ScoreRecord(
             track: track,
