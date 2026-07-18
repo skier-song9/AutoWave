@@ -119,6 +119,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         private let headCap = SKShapeNode()
         private let tailCap = SKShapeNode()
         private let crest = SKShapeNode()
+        private let cropNode = SKCropNode()
+        private let cropMask = SKShapeNode()
 
         private let capHeight: CGFloat = 22
         private let capCornerRadius: CGFloat = 8
@@ -130,6 +132,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         private var laneWidth: CGFloat = 0
         private var scrollSpeed: CGFloat = 0
         private var breakOffset: TimeInterval?
+        private var glowPulseRemaining: TimeInterval = 0
 
         init(
             note: Note,
@@ -167,15 +170,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             crest.zPosition = 3
             crest.isHidden = true
 
-            addChild(band)
-            addChild(core)
-            addChild(completedBand)
-            addChild(completedCore)
-            addChild(remainingBand)
-            addChild(remainingCore)
-            addChild(headCap)
-            addChild(tailCap)
-            addChild(crest)
+            cropMask.fillColor = .white
+            cropMask.strokeColor = .clear
+            cropNode.maskNode = cropMask
+            cropNode.addChild(band)
+            cropNode.addChild(core)
+            cropNode.addChild(completedBand)
+            cropNode.addChild(completedCore)
+            cropNode.addChild(remainingBand)
+            cropNode.addChild(remainingCore)
+            cropNode.addChild(headCap)
+            cropNode.addChild(tailCap)
+            cropNode.addChild(crest)
+            addChild(cropNode)
             zPosition = 1.5
         }
 
@@ -186,8 +193,9 @@ final class GameScene: SKScene, @unchecked Sendable {
         func canBegin(at time: TimeInterval, touchLane: Double) -> Bool {
             guard state == .pending else { return false }
             let timeOffset = abs(note.time - time)
+            let elapsed = max(time - note.time, 0)
             return timeOffset <= 0.150
-                && abs(touchLane - lane(at: 0)) <= 0.6
+                && abs(touchLane - lane(at: 0)) <= laneTolerance(at: elapsed)
         }
 
         func updateLayout(laneOriginX: CGFloat, laneWidth: CGFloat, scrollSpeed: CGFloat) {
@@ -226,6 +234,15 @@ final class GameScene: SKScene, @unchecked Sendable {
                 cornerHeight: 4,
                 transform: nil
             )
+            cropMask.path = CGPath(
+                rect: CGRect(
+                    x: -laneWidth * 8,
+                    y: 0,
+                    width: laneWidth * 16,
+                    height: max(CGFloat(note.duration) * scrollSpeed + capHeight + 1_000, 1_000)
+                ),
+                transform: nil
+            )
             spinePoints = makeSpinePoints()
             applyPaths()
         }
@@ -233,6 +250,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         func markActivated() {
             state = .active
             fingerOn = true
+            glowPulseRemaining = 0.18
+            headCap.isHidden = true
             crest.isHidden = false
             crest.position = point(at: 0)
         }
@@ -245,6 +264,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         func markScored(at time: TimeInterval) {
             guard state == .active else { return }
             fingerOn = true
+            glowPulseRemaining = 0.12
             crest.isHidden = false
             crest.position = point(at: max(time - note.time, 0))
         }
@@ -255,6 +275,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             breakOffset = min(max(time - note.time, 0), note.duration)
             tailCap.fillColor = inactiveBandColor
             tailCap.strokeColor = inactiveCoreColor
+            cropMask.position.y = 0
+            cropNode.isHidden = false
             applyPaths()
             crest.isHidden = true
         }
@@ -262,6 +284,16 @@ final class GameScene: SKScene, @unchecked Sendable {
         func markFinished() {
             state = .finished
             fingerOn = false
+            headCap.isHidden = true
+            tailCap.isHidden = true
+            band.isHidden = true
+            core.isHidden = true
+            completedBand.isHidden = true
+            completedCore.isHidden = true
+            remainingBand.isHidden = true
+            remainingCore.isHidden = true
+            cropNode.isHidden = true
+            isHidden = true
             crest.isHidden = true
         }
 
@@ -275,13 +307,16 @@ final class GameScene: SKScene, @unchecked Sendable {
             headCap.strokeColor = inactiveCoreColor
             tailCap.fillColor = inactiveBandColor
             tailCap.strokeColor = inactiveCoreColor
+            cropMask.position.y = 0
+            cropNode.isHidden = false
             crest.isHidden = true
         }
 
         func update(
             playbackTime: TimeInterval,
             hitLineY: CGFloat,
-            sceneHeight: CGFloat
+            sceneHeight: CGFloat,
+            delta: TimeInterval
         ) {
             let positions = GameplayLayout.ribbonPositions(
                 hitLineY: hitLineY,
@@ -291,6 +326,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             )
             position.y = positions.head
 
+            if state == .active {
+                let elapsed = min(max(playbackTime - note.time, 0), note.duration)
+                cropMask.position.y = CGFloat(elapsed) * scrollSpeed
+                glowPulseRemaining = max(glowPulseRemaining - delta, 0)
+                let pulse = CGFloat(glowPulseRemaining / 0.12)
+                crest.alpha = 0.78 + 0.22 * min(pulse, 1)
+                crest.setScale(1 + 0.12 * min(pulse, 1))
+            } else {
+                cropMask.position.y = 0
+                crest.alpha = 1
+                crest.setScale(1)
+            }
+
             if state == .pending, playbackTime > note.time + 0.150 {
                 markInactive()
             }
@@ -299,7 +347,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             let visibilityPadding = capHeight * 0.5
             let visible = max(position.y, endY) >= -visibilityPadding
                 && min(position.y, endY) <= sceneHeight + visibilityPadding
-            isHidden = !visible
+            isHidden = state == .finished || !visible
 
             guard state == .active, fingerOn, playbackTime < note.time + note.duration else {
                 crest.isHidden = true
@@ -336,7 +384,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         private func applyPaths() {
-            band.path = straightPath(from: spinePoints)
+            band.path = steppedPath(from: spinePoints)
             core.path = band.path
             band.strokeColor = bodyBandColor
             core.strokeColor = bodyColor
@@ -348,8 +396,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             remainingCore.isHidden = true
             headCap.position = spinePoints.first?.point ?? .zero
             tailCap.position = spinePoints.last?.point ?? .zero
-            headCap.isHidden = false
-            tailCap.isHidden = false
+            headCap.isHidden = state == .active || state == .finished
+            tailCap.isHidden = state == .finished
 
             guard state == .broken, let breakOffset else {
                 return
@@ -363,11 +411,11 @@ final class GameScene: SKScene, @unchecked Sendable {
 
             band.isHidden = true
             core.isHidden = true
-            completedBand.path = straightPath(from: completed)
+            completedBand.path = steppedPath(from: completed)
             completedCore.path = completedBand.path
             completedBand.strokeColor = bodyBandColor
             completedCore.strokeColor = bodyColor
-            remainingBand.path = straightPath(from: remaining)
+            remainingBand.path = steppedPath(from: remaining)
             remainingCore.path = remainingBand.path
             remainingBand.strokeColor = inactiveBandColor
             remainingCore.strokeColor = inactiveCoreColor
@@ -377,61 +425,59 @@ final class GameScene: SKScene, @unchecked Sendable {
             remainingCore.isHidden = false
         }
 
-        private func straightPath(from points: [SpinePoint]) -> CGPath? {
+        private func steppedPath(from points: [SpinePoint]) -> CGPath? {
             guard let first = points.first else { return nil }
 
             let path = CGMutablePath()
             path.move(to: first.point)
             for index in 1..<points.count {
-                path.addLine(to: points[index].point)
+                let previous = points[index - 1].point
+                let current = points[index].point
+                path.addLine(to: CGPoint(x: previous.x, y: current.y))
+                path.addLine(to: current)
             }
             return path
         }
 
         private func point(at offset: TimeInterval) -> CGPoint {
-            guard let first = spinePoints.first else { return .zero }
-            guard offset > first.offset else { return first.point }
-
-            for index in 1..<spinePoints.count {
-                let current = spinePoints[index]
-                let previous = spinePoints[index - 1]
-                guard offset <= current.offset else { continue }
-
-                let span = current.offset - previous.offset
-                guard span > 0 else { return current.point }
-                let progress = (offset - previous.offset) / span
-                return CGPoint(
-                    x: previous.point.x + (current.point.x - previous.point.x) * CGFloat(progress),
-                    y: previous.point.y + (current.point.y - previous.point.y) * CGFloat(progress)
-                )
-            }
-
-            return spinePoints.last?.point ?? .zero
+            guard laneWidth > 0 else { return .zero }
+            return CGPoint(
+                x: laneOriginX + (CGFloat(lane(at: offset)) + 0.5) * laneWidth,
+                y: CGFloat(offset) * scrollSpeed
+            )
         }
 
         private func lane(at elapsed: TimeInterval) -> Double {
-            var previousOffset: TimeInterval = 0
-            var previousLane = note.lane
+            var currentLane = note.lane
 
             for keyframe in note.lanePath {
                 let offset = max(keyframe.offset, 0)
-                guard offset > previousOffset else {
-                    previousOffset = offset
-                    previousLane = keyframe.lane
+                guard offset > 0 else {
+                    currentLane = keyframe.lane
                     continue
                 }
 
-                guard elapsed < offset else {
-                    previousOffset = offset
-                    previousLane = keyframe.lane
-                    continue
+                if elapsed < offset {
+                    return currentLane
                 }
-
-                let progress = (elapsed - previousOffset) / (offset - previousOffset)
-                return previousLane + (keyframe.lane - previousLane) * progress
+                currentLane = keyframe.lane
             }
 
-            return previousLane
+            return currentLane
+        }
+
+        private func laneTolerance(at elapsed: TimeInterval) -> Double {
+            guard !note.lanePath.isEmpty else { return 0.8 }
+
+            for keyframe in note.lanePath {
+                let offset = max(keyframe.offset, 0)
+                guard offset > 0, offset < note.duration else { continue }
+                if abs(elapsed - offset) <= 0.15 {
+                    return 1.0
+                }
+            }
+
+            return 0.8
         }
     }
 
@@ -864,7 +910,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             node.update(
                 playbackTime: time,
                 hitLineY: hitLineY,
-                sceneHeight: size.height
+                sceneHeight: size.height,
+                delta: delta
             )
         }
 

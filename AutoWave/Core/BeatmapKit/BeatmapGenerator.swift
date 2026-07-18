@@ -4,6 +4,7 @@ enum BeatmapGenerator {
     static let version = 6
     static let minimumPlayableNoteTime: TimeInterval = 3
     private static let minimumSequentialGap: TimeInterval = 0.12
+    private static let dragSpanPadding: TimeInterval = 0.15
 
     static func generate(from analysis: AnalysisResult, difficulty: Difficulty, seed: UInt64) -> Beatmap {
         let profile = DifficultyProfile.profile(for: difficulty)
@@ -646,11 +647,12 @@ enum BeatmapGenerator {
         drags: [GeneratedNote]
     ) -> Bool {
         drags.contains { drag in
-            let dragLanes = [drag.lane] + drag.lanePath.map { Int($0.lane.rounded()) }
-            let minimumLane = dragLanes.min()!
-            let maximumLane = dragLanes.max()!
-            let dragEnd = drag.time + drag.duration
-            let isActive = tap.time >= drag.time - 1e-9
+            let dragLanes = [Double(drag.lane)] + drag.lanePath.map(\.lane)
+            let minimumLane = Int(floor(dragLanes.min()!))
+            let maximumLane = Int(ceil(dragLanes.max()!))
+            let dragStart = drag.time - dragSpanPadding
+            let dragEnd = drag.time + drag.duration + dragSpanPadding
+            let isActive = tap.time >= dragStart - 1e-9
                 && tap.time <= dragEnd + 1e-9
             return isActive && tap.lane >= minimumLane && tap.lane <= maximumLane
         }

@@ -381,21 +381,33 @@ final class BeatmapGeneratorTests: XCTestCase {
         }
     }
 
-    func testDragSpanExcludesTapsInActiveLaneRange() {
-        let beatmap = BeatmapGenerator.generate(from: makeBusyAnalysis(), difficulty: .hell, seed: 42)
+    func testDragSpanExcludesTapsAcrossAllDifficultiesAndSeeds() {
+        let analysis = makeBusyAnalysis()
 
-        for drag in beatmap.notes where drag.kind == .drag {
-            let dragLanes = [drag.lane] + drag.lanePath.map(\.lane)
-            let minimumLane = dragLanes.min()!
-            let maximumLane = dragLanes.max()!
-            let dragEnd = drag.time + drag.duration
-
-            for tap in beatmap.notes where tap.kind == .tap {
-                guard tap.time >= drag.time - 1e-9, tap.time <= dragEnd + 1e-9 else { continue }
-                XCTAssertTrue(
-                    tap.lane < minimumLane || tap.lane > maximumLane,
-                    "Tap \(tap) conflicts with drag \(drag)"
+        for difficulty in Difficulty.allCases {
+            for seed in 0..<10 {
+                let beatmap = BeatmapGenerator.generate(
+                    from: analysis,
+                    difficulty: difficulty,
+                    seed: UInt64(seed)
                 )
+
+                for drag in beatmap.notes where drag.kind == .drag {
+                    let dragLanes = [drag.lane] + drag.lanePath.map(\.lane)
+                    let minimumLane = floor(dragLanes.min()!)
+                    let maximumLane = ceil(dragLanes.max()!)
+                    let dragStart = drag.time - 0.15
+                    let dragEnd = drag.time + drag.duration + 0.15
+
+                    for tap in beatmap.notes where tap.kind == .tap {
+                        guard tap.time >= dragStart - 1e-9,
+                              tap.time <= dragEnd + 1e-9 else { continue }
+                        XCTAssertTrue(
+                            tap.lane < minimumLane || tap.lane > maximumLane,
+                            "Tap \(tap) conflicts with \(difficulty) drag \(drag), seed \(seed)"
+                        )
+                    }
+                }
             }
         }
     }

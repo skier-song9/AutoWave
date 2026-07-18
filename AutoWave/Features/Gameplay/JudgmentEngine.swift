@@ -56,7 +56,9 @@ final class JudgmentEngine: @unchecked Sendable {
         static let good: TimeInterval = 0.115
         static let bad: TimeInterval = 0.150
         static let comparisonEpsilon: TimeInterval = 0.000_000_001
-        static let dragLaneTolerance = 0.6
+        static let dragLaneTolerance = 0.8
+        static let dragTransitionTolerance = 1.0
+        static let dragTransitionWindow: TimeInterval = 0.15
     }
 
     private var pendingNotes: [PendingNote]
@@ -109,7 +111,10 @@ final class JudgmentEngine: @unchecked Sendable {
         }
 
         let spineLane = lane(at: 0, for: note)
-        guard abs(touchLane - spineLane) <= Window.dragLaneTolerance + Window.comparisonEpsilon else {
+        guard abs(touchLane - spineLane) <= dragLaneTolerance(
+            at: 0,
+            for: note
+        ) + Window.comparisonEpsilon else {
             return nil
         }
 
@@ -139,7 +144,10 @@ final class JudgmentEngine: @unchecked Sendable {
 
         let elapsed = max(time - note.time, 0)
         let spineLane = lane(at: elapsed, for: note)
-        guard abs(touchLane - spineLane) <= Window.dragLaneTolerance + Window.comparisonEpsilon else {
+        guard abs(touchLane - spineLane) <= dragLaneTolerance(
+            at: elapsed,
+            for: note
+        ) + Window.comparisonEpsilon else {
             return breakDrag(at: index)
         }
 
@@ -253,28 +261,38 @@ final class JudgmentEngine: @unchecked Sendable {
     }
 
     private func lane(at elapsed: TimeInterval, for note: Note) -> Double {
-        var previousOffset: TimeInterval = 0
-        var previousLane = note.lane
+        var currentLane = note.lane
 
         for keyframe in note.lanePath {
             let offset = max(keyframe.offset, 0)
-            guard offset > previousOffset else {
-                previousOffset = offset
-                previousLane = keyframe.lane
+            guard offset > 0 else {
+                currentLane = keyframe.lane
                 continue
             }
 
-            guard elapsed < offset else {
-                previousOffset = offset
-                previousLane = keyframe.lane
-                continue
+            if elapsed < offset {
+                return currentLane
             }
-
-            let progress = (elapsed - previousOffset) / (offset - previousOffset)
-            return previousLane + (keyframe.lane - previousLane) * progress
+            currentLane = keyframe.lane
         }
 
-        return previousLane
+        return currentLane
+    }
+
+    private func dragLaneTolerance(at elapsed: TimeInterval, for note: Note) -> Double {
+        guard !note.lanePath.isEmpty else {
+            return Window.dragLaneTolerance
+        }
+
+        for keyframe in note.lanePath {
+            let offset = max(keyframe.offset, 0)
+            guard offset > 0, offset < note.duration else { continue }
+            if abs(elapsed - offset) <= Window.dragTransitionWindow + Window.comparisonEpsilon {
+                return Window.dragTransitionTolerance
+            }
+        }
+
+        return Window.dragLaneTolerance
     }
 
     private func nearestUnconsumedNoteIndex(lane: Int, at time: TimeInterval) -> Int? {

@@ -163,17 +163,36 @@ final class JudgmentEngineTests: XCTestCase {
         XCTAssertEqual(engine.score, 24)
     }
 
-    func testDragTickToleranceIncludesExactlySixTenthsAndBreaksPastIt() {
+    func testHeldDragFinishesAtEndWithoutRetapOrMiss() {
+        let drag = drag(at: 1.0, duration: 0.5, lane: 1.0)
+        let engine = JudgmentEngine(notes: [drag])
+        _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
+
+        for time in [1.1, 1.2, 1.3, 1.4] {
+            XCTAssertTrue(
+                ifCaseScored(engine.dragTick(noteID: drag.id, touchLane: 1.0, at: time))
+            )
+        }
+
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: nil, at: 1.5),
+            .finished
+        )
+        XCTAssertEqual(engine.advance(to: 1.65), [])
+        XCTAssertEqual(engine.judgmentCounts.miss, 0)
+    }
+
+    func testDragTickToleranceIncludesExactlyEightTenthsAndBreaksPastIt() {
         let drag = drag(at: 1.0, duration: 1.0, lane: 1.0)
         let engine = JudgmentEngine(notes: [drag])
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.6, at: 1.1),
+            engine.dragTick(noteID: drag.id, touchLane: 1.8, at: 1.1),
             .scored(points: 3, combo: 2)
         )
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.61, at: 1.2),
+            engine.dragTick(noteID: drag.id, touchLane: 1.81, at: 1.2),
             .broken
         )
     }
@@ -184,7 +203,7 @@ final class JudgmentEngineTests: XCTestCase {
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.61, at: 1.1),
+            engine.dragTick(noteID: drag.id, touchLane: 1.81, at: 1.1),
             .broken
         )
         let scoreAfterBreak = engine.score
@@ -220,18 +239,49 @@ final class JudgmentEngineTests: XCTestCase {
         XCTAssertEqual(engine.life, 95)
     }
 
-    func testMovingDragUsesInterpolatedSpineLane() {
+    func testMovingDragUsesSteppedSpineWithTransitionTolerance() {
         let drag = drag(
             at: 1.0,
             duration: 1.0,
             lane: 1.0,
-            lanePath: [LaneKeyframe(offset: 1.0, lane: 2.5)]
+            lanePath: [LaneKeyframe(offset: 0.8, lane: 3.0)]
         )
         let engine = JudgmentEngine(notes: [drag])
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.75, at: 1.5),
+            engine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.5),
+            .broken
+        )
+
+        let transitionEngine = JudgmentEngine(notes: [drag])
+        _ = transitionEngine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
+        XCTAssertEqual(
+            transitionEngine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.7),
+            .scored(points: 3, combo: 2)
+        )
+        XCTAssertEqual(
+            transitionEngine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.8),
+            .scored(points: 4, combo: 3)
+        )
+        XCTAssertEqual(
+            transitionEngine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.96),
+            .broken
+        )
+    }
+
+    func testMovingDragUsesBaseToleranceOutsideTransitionWindow() {
+        let drag = drag(
+            at: 1.0,
+            duration: 1.0,
+            lane: 1.0,
+            lanePath: [LaneKeyframe(offset: 0.8, lane: 3.0)]
+        )
+        let engine = JudgmentEngine(notes: [drag])
+        _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
+
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 1.8, at: 1.5),
             .scored(points: 3, combo: 2)
         )
     }
@@ -242,7 +292,7 @@ final class JudgmentEngineTests: XCTestCase {
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.61, at: 1.1),
+            engine.dragTick(noteID: drag.id, touchLane: 1.81, at: 1.1),
             .broken
         )
         XCTAssertEqual(engine.advance(to: 2.0), [])
@@ -340,5 +390,12 @@ final class JudgmentEngineTests: XCTestCase {
             duration: duration,
             lanePath: lanePath
         )
+    }
+
+    private func ifCaseScored(_ result: DragTickResult) -> Bool {
+        if case .scored = result {
+            return true
+        }
+        return false
     }
 }
