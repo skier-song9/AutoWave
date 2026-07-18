@@ -7,17 +7,20 @@ final class ProfileEntity {
     var avatarSymbol: String
     var avatarTint: String
     var createdAt: Date
+    var noteSpeedMultiplier: Double = 1.0
 
     init(
         nickname: String = "플레이어",
         avatarSymbol: String = "water.waves",
         avatarTint: String = "#4FC3F7",
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        noteSpeedMultiplier: Double = 1.0
     ) {
         self.nickname = nickname
         self.avatarSymbol = avatarSymbol
         self.avatarTint = avatarTint
         self.createdAt = createdAt
+        self.noteSpeedMultiplier = noteSpeedMultiplier
     }
 
     static func current(in context: ModelContext) -> ProfileEntity {

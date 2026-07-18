@@ -18,6 +18,19 @@ private func makeColor(for rgb: RGB, alpha: CGFloat = 1) -> SKColor {
 }
 
 final class GameScene: SKScene, @unchecked Sendable {
+    private func makeScanlineTexture() -> SKTexture {
+        let size = CGSize(width: 4, height: 256)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            rendererContext.cgContext.setFillColor(UIColor.white.cgColor)
+            for y in stride(from: 0, to: Int(size.height), by: 2) {
+                rendererContext.cgContext.fill(CGRect(x: 0, y: CGFloat(y), width: size.width, height: 1))
+            }
+        }
+        return SKTexture(image: image)
+    }
+
     private final class TapNoteNode: SKNode {
         let note: Note
 
@@ -607,18 +620,33 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var laneFillNodes: [SKShapeNode] = []
     private var boundaryNodes: [SKShapeNode] = []
     private var receptorNodes: [SKShapeNode] = []
+    private var lifeSegmentNodes: [SKShapeNode] = []
     private var receptorFlashRemaining: [TimeInterval] = []
     private var hitPopNodes: [HitPopNode] = []
     private var rippleNodes: [SKShapeNode] = []
     private var rippleStates = Array(repeating: RippleState(), count: 6)
     private let backgroundOverlayNode = SKShapeNode()
+    private let scanlineOverlayNode = SKSpriteNode()
     private let hitLineNode = SKShapeNode()
-    private let comboCaptionLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let comboValueLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let latestJudgmentLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let scoreCaptionLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let scoreValueLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let lifeCaptionLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let comboPanelOuterNode = SKShapeNode()
+    private let comboPanelInnerNode = SKShapeNode()
+    private let scorePanelOuterNode = SKShapeNode()
+    private let scorePanelInnerNode = SKShapeNode()
+    private let lifePanelOuterNode = SKShapeNode()
+    private let lifePanelInnerNode = SKShapeNode()
+    private let comboCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let comboValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private var comboOutlineLabels: [SKLabelNode] = []
+    private let comboOutlineOffsets = [
+        CGPoint(x: -1.5, y: 0),
+        CGPoint(x: 1.5, y: 0),
+        CGPoint(x: 0, y: -1.5),
+        CGPoint(x: 0, y: 1.5)
+    ]
+    private let latestJudgmentLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let scoreCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let scoreValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let lifeCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let lifeGaugeTrack = SKShapeNode()
     private let lifeGaugeFill = SKShapeNode()
     private let gameOverLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
@@ -655,6 +683,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         difficulty: Difficulty,
         judgmentEngine: JudgmentEngine,
         visualizerTap: VisualizerTap,
+        noteSpeedMultiplier: CGFloat = 1,
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool,
         audioDuration: TimeInterval,
@@ -678,6 +707,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         rippleColor = makeColor(for: selectedTheme.ripple)
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
+        scrollSpeedMultiplier = min(max(noteSpeedMultiplier, 0.5), 1.5)
         laneCount = min(max(beatmap.laneCount, 4), 7)
         let lastNoteTime = beatmap.notes.reduce(0) { max($0, $1.time) }
         completionFallbackTime = max(audioDuration, lastNoteTime) + 2
@@ -708,6 +738,12 @@ final class GameScene: SKScene, @unchecked Sendable {
         backgroundOverlayNode.zPosition = -2
         backgroundOverlayNode.alpha = 0
         addChild(backgroundOverlayNode)
+
+        scanlineOverlayNode.texture = makeScanlineTexture()
+        scanlineOverlayNode.anchorPoint = .zero
+        scanlineOverlayNode.zPosition = -1
+        scanlineOverlayNode.alpha = 0.045
+        addChild(scanlineOverlayNode)
 
         for _ in rippleStates.indices {
             let ripple = SKShapeNode(circleOfRadius: 1)
@@ -785,21 +821,55 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private func configureHUD() {
+        for panel in [
+            comboPanelOuterNode,
+            scorePanelOuterNode,
+            lifePanelOuterNode
+        ] {
+            panel.fillColor = makeColor(for: theme.backgroundTop, alpha: 0.35)
+            panel.strokeColor = laneLineColor.withAlphaComponent(0.75)
+            panel.lineWidth = 1
+            panel.zPosition = 10
+        }
+        for panel in [
+            comboPanelInnerNode,
+            scorePanelInnerNode,
+            lifePanelInnerNode
+        ] {
+            panel.fillColor = .clear
+            panel.strokeColor = laneLineColor.withAlphaComponent(0.45)
+            panel.lineWidth = 1
+            panel.zPosition = 10.1
+        }
+
         comboCaptionLabel.text = "콤보"
-        comboCaptionLabel.fontSize = 13
+        comboCaptionLabel.fontSize = 12
         comboCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
         comboCaptionLabel.horizontalAlignmentMode = .center
         comboCaptionLabel.verticalAlignmentMode = .center
         comboCaptionLabel.zPosition = 12
 
         comboValueLabel.text = "0"
-        comboValueLabel.fontSize = 34
+        comboValueLabel.fontSize = 36
         comboValueLabel.fontColor = .white
         comboValueLabel.horizontalAlignmentMode = .center
         comboValueLabel.verticalAlignmentMode = .center
         comboValueLabel.zPosition = 12
 
-        latestJudgmentLabel.fontSize = 16
+        for offset in comboOutlineOffsets {
+            let outline = SKLabelNode(fontNamed: "Menlo-Bold")
+            outline.text = "0"
+            outline.fontSize = 36
+            outline.fontColor = .black.withAlphaComponent(0.85)
+            outline.horizontalAlignmentMode = .center
+            outline.verticalAlignmentMode = .center
+            outline.position = offset
+            outline.zPosition = 11.9
+            comboOutlineLabels.append(outline)
+            addChild(outline)
+        }
+
+        latestJudgmentLabel.fontSize = 19
         latestJudgmentLabel.fontColor = judgmentAccentColor
         latestJudgmentLabel.horizontalAlignmentMode = .center
         latestJudgmentLabel.verticalAlignmentMode = .center
@@ -814,7 +884,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         scoreCaptionLabel.zPosition = 12
 
         scoreValueLabel.text = "0"
-        scoreValueLabel.fontSize = 22
+        scoreValueLabel.fontSize = 18
         scoreValueLabel.fontColor = .white
         scoreValueLabel.horizontalAlignmentMode = .center
         scoreValueLabel.verticalAlignmentMode = .center
@@ -832,8 +902,18 @@ final class GameScene: SKScene, @unchecked Sendable {
         lifeGaugeTrack.lineWidth = 1
         lifeGaugeTrack.zPosition = 12
 
+        lifeGaugeFill.fillColor = .clear
         lifeGaugeFill.strokeColor = .clear
         lifeGaugeFill.zPosition = 13
+
+        for _ in 0..<20 {
+            let segment = SKShapeNode()
+            segment.fillColor = lifeGaugeColor(for: 1)
+            segment.strokeColor = .clear
+            segment.zPosition = 13.1
+            lifeSegmentNodes.append(segment)
+            addChild(segment)
+        }
 
         gameOverLabel.text = "게임 오버"
         gameOverLabel.fontSize = 38
@@ -843,6 +923,12 @@ final class GameScene: SKScene, @unchecked Sendable {
         gameOverLabel.zPosition = 14
         gameOverLabel.isHidden = true
 
+        addChild(comboPanelOuterNode)
+        addChild(comboPanelInnerNode)
+        addChild(scorePanelOuterNode)
+        addChild(scorePanelInnerNode)
+        addChild(lifePanelOuterNode)
+        addChild(lifePanelInnerNode)
         addChild(comboCaptionLabel)
         addChild(comboValueLabel)
         addChild(latestJudgmentLabel)
@@ -991,7 +1077,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     func setScrollSpeedMultiplier(_ multiplier: CGFloat) {
-        scrollSpeedMultiplier = min(max(multiplier, 0.5), 1.25)
+        scrollSpeedMultiplier = min(max(multiplier, 0.5), 1.5)
         for node in ribbonNodes {
             node.updateLayout(
                 laneOriginX: laneAreaRect.minX,
@@ -1014,6 +1100,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             rect: CGRect(origin: .zero, size: size),
             transform: nil
         )
+        scanlineOverlayNode.size = size
+        scanlineOverlayNode.position = .zero
 
         laneAreaRect = GameplayLayout.laneAreaRect(in: size)
         let usableWidth = laneAreaRect.width
@@ -1071,6 +1159,8 @@ final class GameScene: SKScene, @unchecked Sendable {
                 y: hitLineY
             )
             receptor.strokeColor = laneLineColor
+            receptor.lineWidth = 2
+            receptor.glowWidth = 0
             receptor.alpha = 1
         }
 
@@ -1082,13 +1172,21 @@ final class GameScene: SKScene, @unchecked Sendable {
         let hudTopMargin = max(size.height * 0.06, 54)
         comboCaptionLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin)
         comboValueLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 48)
+        for (index, outline) in comboOutlineLabels.enumerated() {
+            let offset = comboOutlineOffsets[index]
+            outline.position = CGPoint(
+                x: comboValueLabel.position.x + offset.x,
+                y: comboValueLabel.position.y + offset.y
+            )
+        }
         latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 96)
-        scoreCaptionLabel.position = CGPoint(x: laneAreaRect.minX / 2, y: size.height * 0.10 + 16)
-        scoreValueLabel.position = CGPoint(x: laneAreaRect.minX / 2, y: size.height * 0.10 - 10)
+        let scoreCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
+        scoreCaptionLabel.position = CGPoint(x: scoreCenterX, y: size.height * 0.10 + 16)
+        scoreValueLabel.position = CGPoint(x: scoreCenterX, y: size.height * 0.10 - 10)
 
-        let lifeCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
-        let gaugeHeight = min(max(size.height * 0.45, 100), 190)
-        let gaugeBottom = size.height * 0.18
+        let lifeCenterX = laneAreaRect.minX / 2
+        let gaugeHeight = min(max(size.height * 0.60, 120), size.height * 0.75)
+        let gaugeBottom = max((size.height - gaugeHeight) / 2, 8)
         let gaugeRect = CGRect(x: -8, y: 0, width: 16, height: gaugeHeight)
         let gaugeCornerRadius = min(8, min(gaugeRect.width, gaugeRect.height) / 2)
         let gaugePath = CGPath(
@@ -1103,6 +1201,55 @@ final class GameScene: SKScene, @unchecked Sendable {
         lifeGaugeFill.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
         lifeCaptionLabel.position = CGPoint(x: lifeCenterX, y: gaugeBottom + gaugeHeight + 16)
         gameOverLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height * 0.52)
+
+        let segmentGap: CGFloat = 3
+        let segmentHeight = max((gaugeHeight - segmentGap * 19) / 20, 1)
+        let segmentPath = CGPath(
+            roundedRect: CGRect(x: -8, y: 0, width: 16, height: segmentHeight),
+            cornerWidth: 4,
+            cornerHeight: 4,
+            transform: nil
+        )
+        for (index, segment) in lifeSegmentNodes.enumerated() {
+            segment.path = segmentPath
+            segment.position = CGPoint(
+                x: lifeCenterX,
+                y: gaugeBottom + CGFloat(index) * (segmentHeight + segmentGap)
+            )
+        }
+
+        let gutterWidth = min(laneAreaRect.minX, size.width - laneAreaRect.maxX)
+        let gutterPanelWidth = max(min(gutterWidth - 12, 180), 104)
+        updatePanel(
+            outer: scorePanelOuterNode,
+            inner: scorePanelInnerNode,
+            rect: CGRect(
+                x: scoreCenterX - gutterPanelWidth / 2,
+                y: max(size.height * 0.03, 8),
+                width: gutterPanelWidth,
+                height: 80
+            )
+        )
+        updatePanel(
+            outer: lifePanelOuterNode,
+            inner: lifePanelInnerNode,
+            rect: CGRect(
+                x: lifeCenterX - gutterPanelWidth / 2,
+                y: max(gaugeBottom - 24, 8),
+                width: gutterPanelWidth,
+                height: gaugeHeight + 60
+            )
+        )
+        updatePanel(
+            outer: comboPanelOuterNode,
+            inner: comboPanelInnerNode,
+            rect: CGRect(
+                x: laneAreaRect.midX - 100,
+                y: max(size.height - hudTopMargin - 128, 8),
+                width: 200,
+                height: 144
+            )
+        )
 
         for node in noteNodes {
             node.updateLayout(laneWidth: laneWidth)
@@ -1124,6 +1271,25 @@ final class GameScene: SKScene, @unchecked Sendable {
 
     private var currentScrollSpeed: CGFloat {
         scrollSpeed * scrollSpeedMultiplier
+    }
+
+    private func updatePanel(
+        outer: SKShapeNode,
+        inner: SKShapeNode,
+        rect: CGRect
+    ) {
+        outer.path = CGPath(
+            roundedRect: rect,
+            cornerWidth: 8,
+            cornerHeight: 8,
+            transform: nil
+        )
+        inner.path = CGPath(
+            roundedRect: rect.insetBy(dx: 5, dy: 5),
+            cornerWidth: 5,
+            cornerHeight: 5,
+            transform: nil
+        )
     }
 
     private func frameDelta(at currentTime: TimeInterval) -> TimeInterval {
@@ -1207,9 +1373,11 @@ final class GameScene: SKScene, @unchecked Sendable {
             let receptor = receptorNodes[index]
             if remaining == 0 {
                 receptor.strokeColor = laneLineColor
+                receptor.glowWidth = 0
                 receptor.alpha = 1
             } else {
                 receptor.strokeColor = judgmentAccentColor
+                receptor.glowWidth = 4
                 receptor.alpha = CGFloat(0.45 + 0.55 * (remaining / 0.18))
             }
         }
@@ -1219,6 +1387,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         guard receptorNodes.indices.contains(lane) else { return }
         receptorFlashRemaining[lane] = 0.18
         receptorNodes[lane].strokeColor = judgmentAccentColor
+        receptorNodes[lane].glowWidth = 4
         receptorNodes[lane].alpha = 1
     }
 
@@ -1386,10 +1555,14 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         latestJudgmentLabel.text = judgmentText
+        latestJudgmentLabel.fontColor = judgmentColor(for: result.judgment)
         latestJudgmentLabel.alpha = 1
         latestJudgmentTime = time
         comboPulseRemaining = 0.18
         comboValueLabel.setScale(1.12)
+        for outline in comboOutlineLabels {
+            outline.setScale(1.12)
+        }
     }
 
     private func updateJudgmentLabel(at time: TimeInterval) {
@@ -1431,12 +1604,15 @@ final class GameScene: SKScene, @unchecked Sendable {
         let combo = judgmentEngine.combo
         if combo != lastRenderedCombo {
             comboValueLabel.text = "\(combo)"
+            for outline in comboOutlineLabels {
+                outline.text = "\(combo)"
+            }
             lastRenderedCombo = combo
         }
 
         let score = judgmentEngine.score
         if score != lastRenderedScore {
-            scoreValueLabel.text = "\(score)"
+            scoreValueLabel.text = String(format: "%07d", score)
             lastRenderedScore = score
         }
 
@@ -1444,19 +1620,31 @@ final class GameScene: SKScene, @unchecked Sendable {
         if life <= 0 {
             lifeGaugeFill.yScale = 0
             lifeGaugeFill.isHidden = true
+            for segment in lifeSegmentNodes {
+                segment.isHidden = true
+            }
             lastRenderedLife = life
         } else if life != lastRenderedLife {
             let fraction = CGFloat(life) / 100
             lifeGaugeFill.xScale = 1
-            lifeGaugeFill.yScale = fraction
-            lifeGaugeFill.fillColor = lifeGaugeColor(for: fraction)
+            lifeGaugeFill.yScale = 1
             lifeGaugeFill.isHidden = false
+            let filledSegmentCount = min(max(life / 5, 0), lifeSegmentNodes.count)
+            let color = lifeGaugeColor(for: fraction)
+            for (index, segment) in lifeSegmentNodes.enumerated() {
+                segment.fillColor = color
+                segment.isHidden = index >= filledSegmentCount
+            }
             lastRenderedLife = life
         }
 
         comboPulseRemaining = max(comboPulseRemaining - lastFrameDelta, 0)
         let pulse = comboPulseRemaining / 0.18
-        comboValueLabel.setScale(1 + 0.12 * CGFloat(pulse))
+        let scale = 1 + 0.12 * CGFloat(pulse)
+        comboValueLabel.setScale(scale)
+        for outline in comboOutlineLabels {
+            outline.setScale(scale)
+        }
     }
 
     private func lifeGaugeColor(for fraction: CGFloat) -> SKColor {
@@ -1477,6 +1665,21 @@ final class GameScene: SKScene, @unchecked Sendable {
             blue: 0.10 + 0.08 * progress,
             alpha: 1
         )
+    }
+
+    private func judgmentColor(for judgment: Judgment) -> SKColor {
+        switch judgment {
+        case .perfect:
+            return .cyan
+        case .great:
+            return .green
+        case .good:
+            return .yellow
+        case .bad:
+            return .orange
+        case .miss:
+            return .red
+        }
     }
 
     private func beginGameOver() {

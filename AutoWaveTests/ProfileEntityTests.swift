@@ -28,4 +28,24 @@ final class ProfileEntityTests: XCTestCase {
         XCTAssertNil(ProfileEntity.validatedNickname(String(repeating: "가", count: 13)))
         XCTAssertEqual(ProfileEntity.validatedNickname(String(repeating: "가", count: 12))?.count, 12)
     }
+
+    func testNoteSpeedMultiplierDefaultsAndPersistsAcrossContexts() throws {
+        let schema = Schema([ProfileEntity.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let profile = ProfileEntity()
+
+        context.insert(profile)
+        XCTAssertEqual(profile.noteSpeedMultiplier, 1.0)
+
+        profile.noteSpeedMultiplier = 1.5
+        try context.save()
+
+        let reloadedContext = ModelContext(container)
+        let reloaded = try reloadedContext.fetch(FetchDescriptor<ProfileEntity>())
+
+        XCTAssertEqual(reloaded.count, 1)
+        XCTAssertEqual(reloaded.first?.noteSpeedMultiplier, 1.5)
+    }
 }

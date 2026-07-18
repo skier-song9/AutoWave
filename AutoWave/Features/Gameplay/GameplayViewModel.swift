@@ -66,6 +66,8 @@ final class PlaybackClock: @unchecked Sendable {
 @MainActor
 @Observable
 final class GameplayViewModel {
+    static let noteSpeedMultipliers = [0.5, 0.75, 1.0, 1.5]
+
     enum State: Equatable, Sendable {
         case idle
         case ready
@@ -82,6 +84,7 @@ final class GameplayViewModel {
     private(set) var saveErrorMessage: String?
     private(set) var isPaused = false
     private(set) var countdown: Int?
+    private(set) var noteSpeedMultiplier = 1.0
 
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioFile: AVAudioFile?
@@ -112,6 +115,8 @@ final class GameplayViewModel {
 
         do {
             prepareHaptics()
+            let profile = ProfileEntity.current(in: context)
+            let speedMultiplier = Self.validNoteSpeedMultiplier(profile.noteSpeedMultiplier)
             guard let beatmapEntity = track.beatmaps.first(where: {
                 $0.difficulty == difficulty.rawValue
             }) else {
@@ -155,11 +160,13 @@ final class GameplayViewModel {
             isPaused = false
             countdown = nil
             saveErrorMessage = nil
+            noteSpeedMultiplier = speedMultiplier
             gameplayScene = GameScene(
                 beatmap: decodedBeatmap,
                 difficulty: difficulty,
                 judgmentEngine: judgmentEngine,
                 visualizerTap: newVisualizerTap,
+                noteSpeedMultiplier: CGFloat(speedMultiplier),
                 playbackTime: {
                     clock.currentTime
                 },
@@ -192,6 +199,29 @@ final class GameplayViewModel {
 
     func currentPlaybackTime() -> TimeInterval {
         playbackClock?.currentTime ?? 0
+    }
+
+    func cycleNoteSpeedMultiplier(in context: ModelContext) {
+        guard state == .ready else { return }
+
+        let currentIndex = Self.noteSpeedMultipliers.firstIndex {
+            abs($0 - noteSpeedMultiplier) < 0.000_001
+        } ?? 2
+        let nextIndex = (currentIndex + 1) % Self.noteSpeedMultipliers.count
+        updateNoteSpeedMultiplier(Self.noteSpeedMultipliers[nextIndex], in: context)
+    }
+
+    private func updateNoteSpeedMultiplier(_ multiplier: Double, in context: ModelContext) {
+        noteSpeedMultiplier = multiplier
+        gameplayScene?.setScrollSpeedMultiplier(CGFloat(multiplier))
+
+        let profile = ProfileEntity.current(in: context)
+        profile.noteSpeedMultiplier = multiplier
+        do {
+            try context.save()
+        } catch {
+            saveErrorMessage = "배속 설정을 저장하지 못했어요"
+        }
     }
 
     func pause() {
@@ -350,6 +380,12 @@ final class GameplayViewModel {
             dragBreakHaptic?.notificationOccurred(.warning)
             dragBreakHaptic?.prepare()
         }
+    }
+
+    private static func validNoteSpeedMultiplier(_ value: Double) -> Double {
+        noteSpeedMultipliers.first {
+            abs($0 - value) < 0.000_001
+        } ?? 1.0
     }
 }
 

@@ -98,8 +98,6 @@ private struct GameplaySessionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: GameplayViewModel
     @State private var isPauseMenuPresented = false
-    @State private var isSpeedMenuPresented = false
-    @State private var scrollSpeedMultiplier: CGFloat = 1
 
     private let onComplete: (GameplaySummary) -> Void
     private let onRestart: () -> Void
@@ -150,7 +148,7 @@ private struct GameplaySessionView: View {
             viewModel.stop()
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase != .active else { return }
+            guard phase == .inactive || phase == .background else { return }
             pauseGame()
         }
         .onReceive(NotificationCenter.default.publisher(
@@ -179,14 +177,15 @@ private struct GameplaySessionView: View {
     private var gameplayContent: some View {
         if let scene = viewModel.scene {
             SpriteView(scene: scene, options: [.ignoresSiblingOrder])
-                .overlay(alignment: .topLeading) {
-                    if !isPauseMenuPresented && !viewModel.isPaused {
-                        speedControl(scene: scene)
-                    }
-                }
                 .overlay(alignment: .topTrailing) {
                     if !isPauseMenuPresented && !viewModel.isPaused {
-                        pauseButton
+                        VStack(alignment: .trailing, spacing: 8) {
+                            speedControl
+                            pauseButton
+                        }
+                        .padding(.top, 18)
+                        .padding(.trailing, 18)
+                        .zIndex(20)
                     }
                 }
                 .overlay {
@@ -213,48 +212,21 @@ private struct GameplaySessionView: View {
         .accessibilityLabel("일시정지")
         .contentShape(Rectangle())
         .frame(width: 72, height: 72)
-        .padding(.top, 18)
-        .padding(.trailing, 18)
-        .zIndex(20)
     }
 
-    private func speedControl(scene: GameScene) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                isSpeedMenuPresented.toggle()
-            } label: {
-                Label("배속 \(speedLabel(scrollSpeedMultiplier))", systemImage: "speedometer")
-                    .font(.headline)
-                    .padding(12)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.black.opacity(0.65))
-            .accessibilityLabel("노트 배속")
-            .frame(minWidth: 132, minHeight: 56)
-
-            if isSpeedMenuPresented {
-                VStack(spacing: 0) {
-                    ForEach([CGFloat(0.5), 0.75, 1.0, 1.25], id: \.self) { value in
-                        Button(speedLabel(value)) {
-                            scrollSpeedMultiplier = value
-                            scene.setScrollSpeedMultiplier(value)
-                            isSpeedMenuPresented = false
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .buttonStyle(.plain)
-                    }
-                }
-                .foregroundStyle(.white)
-                .background(.black.opacity(0.86), in: RoundedRectangle(cornerRadius: 14))
-            }
+    private var speedControl: some View {
+        Button {
+            viewModel.cycleNoteSpeedMultiplier(in: modelContext)
+        } label: {
+            Label("배속 \(speedLabel(viewModel.noteSpeedMultiplier))", systemImage: "speedometer")
+                .font(.headline)
+                .padding(12)
         }
-        .foregroundStyle(.white)
-        .padding(.top, 18)
-        .padding(.leading, 18)
+        .buttonStyle(.borderedProminent)
+        .tint(.black.opacity(0.65))
+        .accessibilityLabel("노트 배속 변경")
+        .frame(minWidth: 132, minHeight: 56)
         .contentShape(Rectangle())
-        .zIndex(20)
     }
 
     private var pauseOverlay: some View {
@@ -293,9 +265,10 @@ private struct GameplaySessionView: View {
 
     private func pauseGame() {
         guard viewModel.state == .ready else { return }
-        isSpeedMenuPresented = false
-        isPauseMenuPresented = true
         viewModel.pause()
+        if viewModel.isPaused {
+            isPauseMenuPresented = true
+        }
     }
 
     private func speedLabel(_ value: CGFloat) -> String {
