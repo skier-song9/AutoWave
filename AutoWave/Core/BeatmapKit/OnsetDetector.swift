@@ -4,7 +4,7 @@ enum OnsetDetector {
     static let medianWindowSize = 11
     static let medianMultiplier: Float = 1.5
     static let globalMedianMultiplier: Float = 4
-    static let minimumGap: TimeInterval = 0.1
+    static let minimumGap: TimeInterval = 0.12
 
     static func detect(
         frames: [SpectralFrame],

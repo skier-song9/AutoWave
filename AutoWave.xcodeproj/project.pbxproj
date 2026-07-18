@@ -22,6 +22,7 @@
 		43EB66F57AEBAA3608970DB0 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2566011226FE45AC21A6643 /* HomeView.swift */; };
 		468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */; };
 		477D1DA3C343CC7274B9360F /* VisualizerTapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A27C6934E3C4EBFA9C82F379 /* VisualizerTapTests.swift */; };
+		4B332C36446BEB28129D4357 /* GameplayRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4283D2922AD1AC93C422163 /* GameplayRules.swift */; };
 		4E9D5146F29A50FB1BDEDE1E /* BeatmapGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF1ACE063435D7B9FF60D05B /* BeatmapGenerator.swift */; };
 		4F35CBD7A0DE4AE59E6CFA2E /* Difficulty.swift in Sources */ = {isa = PBXBuildFile; fileRef = B838024FE85D54086054056C /* Difficulty.swift */; };
 		57FEEC0ABFCB98D0E67F0AD6 /* ProfileEntityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBDE3DE53FA697705BD3BF15 /* ProfileEntityTests.swift */; };
@@ -40,6 +41,7 @@
 		98609DE5D28DF6093289DED5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D13CB8183B74413834203CDE /* Assets.xcassets */; };
 		A6F6EDC8B5C80B704D21F08D /* AnalysisResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */; };
 		A92ADBDB3A1E2C3A73A3EEDE /* ThemePalette+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8691CAFFEAB2834B48019DCA /* ThemePalette+Color.swift */; };
+		B1AEE8B369EA0F32BCD2394D /* GameplayRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B3E9395530B6C8B576517B /* GameplayRulesTests.swift */; };
 		BCD2346A76B40E8A5C6FB56C /* AnalysisViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55E48455E8154910369247C /* AnalysisViewModel.swift */; };
 		D5CE7F53B5A64A5526C32D71 /* DifficultyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB8E7DA53502C42F736E8BB2 /* DifficultyProfile.swift */; };
 		DA28903BFFA7CD540C17EFBB /* TempoEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01DCD591067C17F67DDD657 /* TempoEstimator.swift */; };
@@ -71,11 +73,12 @@
 		08741EB06AB2B080C0197533 /* BeatmapEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatmapEntity.swift; sourceTree = "<group>"; };
 		08A10EA7786646DD984CE60D /* GameTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameTheme.swift; sourceTree = "<group>"; };
 		160827C3FB2FBDE75B7EF568 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayContainerView.swift; sourceTree = "<group>"; };
 		21F5FCD750E8995AEF6729BE /* GameScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameScene.swift; sourceTree = "<group>"; };
 		22224A132309EC70DCAEFFCB /* OnsetDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnsetDetector.swift; sourceTree = "<group>"; };
 		22C329DC7FC347641216CC9D /* EndToEndPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EndToEndPipelineTests.swift; sourceTree = "<group>"; };
+		25B3E9395530B6C8B576517B /* GameplayRulesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayRulesTests.swift; sourceTree = "<group>"; };
 		2B4A1DC0CEDC3B08018D1031 /* AnalysisViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisViewModelTests.swift; sourceTree = "<group>"; };
 		2EDED955B49B3794D34596BD /* AudioImportServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportServiceTests.swift; sourceTree = "<group>"; };
 		2EE9868A791DD6F67C5AD54E /* SpectralAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectralAnalyzer.swift; sourceTree = "<group>"; };
@@ -110,6 +113,7 @@
 		DF1ACE063435D7B9FF60D05B /* BeatmapGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatmapGenerator.swift; sourceTree = "<group>"; };
 		E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisResult.swift; sourceTree = "<group>"; };
 		EE593BEDFA8C184576267AA8 /* ProfileEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEntity.swift; sourceTree = "<group>"; };
+		F4283D2922AD1AC93C422163 /* GameplayRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayRules.swift; sourceTree = "<group>"; };
 		F91602EB219128BF634E03E0 /* TrackEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackEntity.swift; sourceTree = "<group>"; };
 		FB122FE7F3C40CD155F2DBFF /* AutoWaveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AutoWaveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB38A448795557AE2574814B /* AudioImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportService.swift; sourceTree = "<group>"; };
@@ -143,6 +147,7 @@
 				A1D15A471F4F77E1DB616866 /* Beatmap.swift */,
 				08741EB06AB2B080C0197533 /* BeatmapEntity.swift */,
 				B838024FE85D54086054056C /* Difficulty.swift */,
+				F4283D2922AD1AC93C422163 /* GameplayRules.swift */,
 				08A10EA7786646DD984CE60D /* GameTheme.swift */,
 				A3FC0C485E13506255F9E5D2 /* Note.swift */,
 				EE593BEDFA8C184576267AA8 /* ProfileEntity.swift */,
@@ -270,6 +275,7 @@
 				5E5186CF25B7B76424064BF9 /* BeatmapGeneratorTests.swift */,
 				7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */,
 				22C329DC7FC347641216CC9D /* EndToEndPipelineTests.swift */,
+				25B3E9395530B6C8B576517B /* GameplayRulesTests.swift */,
 				52A1B76159F17CA25DC0A39B /* GameplayStartRegressionTests.swift */,
 				BE2352FEEDCB5DFCC346E973 /* GameplaySummaryTests.swift */,
 				5669E62DC438C49A5F39AE5F /* JudgmentEngineTests.swift */,
@@ -337,8 +343,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = F4CD9BD22895FB19A32034E3 /* Build configuration list for PBXProject "AutoWave" */;
 			developmentRegion = en;
@@ -381,6 +385,7 @@
 				E35BBCC0CB507D17C48D4791 /* BeatmapGeneratorTests.swift in Sources */,
 				172A6F44EF074B2507A1DE2F /* BeatmapKitAnalysisTests.swift in Sources */,
 				1E0A10A7CE016CF9F1A98387 /* EndToEndPipelineTests.swift in Sources */,
+				B1AEE8B369EA0F32BCD2394D /* GameplayRulesTests.swift in Sources */,
 				39F78B8DF8EAF05F04C4D76D /* GameplayStartRegressionTests.swift in Sources */,
 				733641CB359AF96AC1A84801 /* GameplaySummaryTests.swift in Sources */,
 				0DA17E97E776CA4019BC9342 /* JudgmentEngineTests.swift in Sources */,
@@ -409,6 +414,7 @@
 				F9BCF3F23AB974F3C441A617 /* GameScene.swift in Sources */,
 				30BF263ED6830066E6C66F3D /* GameTheme.swift in Sources */,
 				89A5AABFD6B5F8635EC54433 /* GameplayContainerView.swift in Sources */,
+				4B332C36446BEB28129D4357 /* GameplayRules.swift in Sources */,
 				F4EE4F77B8D16F619D51D0F3 /* GameplayViewModel.swift in Sources */,
 				43EB66F57AEBAA3608970DB0 /* HomeView.swift in Sources */,
 				12BBF03790D7DCADD0B6A93C /* ImportView.swift in Sources */,
@@ -598,6 +604,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = QSN8D73M83;
 				INFOPLIST_FILE = AutoWave/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -615,6 +622,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = QSN8D73M83;
 				INFOPLIST_FILE = AutoWave/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

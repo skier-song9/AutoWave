@@ -118,7 +118,8 @@ final class GameplayViewModel {
                 throw GameplayError.beatmapMissing
             }
 
-            let decodedBeatmap = try JSONDecoder().decode(Beatmap.self, from: beatmapEntity.beatmapData)
+            var decodedBeatmap = try JSONDecoder().decode(Beatmap.self, from: beatmapEntity.beatmapData)
+            decodedBeatmap.notes = GameplayBeatmapSanitizer.removeTapConflicts(from: decodedBeatmap.notes)
             let judgmentEngine = JudgmentEngine(notes: decodedBeatmap.notes)
             let newAudioFile = try AVAudioFile(forReading: track.audioURL)
             let newAudioEngine = AVAudioEngine()

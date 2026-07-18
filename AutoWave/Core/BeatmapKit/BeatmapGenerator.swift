@@ -1,7 +1,9 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 3
+    static let version = 6
+    static let minimumPlayableNoteTime: TimeInterval = 3
+    private static let minimumSequentialGap: TimeInterval = 0.12
 
     static func generate(from analysis: AnalysisResult, difficulty: Difficulty, seed: UInt64) -> Beatmap {
         let profile = DifficultyProfile.profile(for: difficulty)
@@ -11,7 +13,10 @@ enum BeatmapGenerator {
         let indexedOnsets = analysis.onsets.enumerated().map {
             IndexedOnset(index: $0.offset, onset: $0.element)
         }
-        let selected = selectOnsets(indexedOnsets, profile: profile)
+        let detectedOnsets = selectOnsets(indexedOnsets, profile: profile)
+        let selected = detectedOnsets.isEmpty
+            ? fallbackBeatOnsets(for: analysis)
+            : detectedOnsets
         let dragSources = chooseDragSources(
             from: selected,
             ratio: profile.dragRatio,
@@ -24,16 +29,18 @@ enum BeatmapGenerator {
             ratio: profile.movingDragRatio,
             rng: &rng
         )
-        let patternEvents = cullByRate(
-            makePatternEvents(
-                from: selected,
-                difficulty: difficulty,
-                beat: beat,
-                subdivision: subdivision,
-                duration: analysis.duration,
-                rng: &rng
-            ),
-            cap: Int(ceil(profile.maxNotesPerSecond))
+        let patternEvents = enforceMinimumSequentialGap(
+            cullByRate(
+                makePatternEvents(
+                    from: selected,
+                    difficulty: difficulty,
+                    subdivision: subdivision,
+                    duration: analysis.duration,
+                    beatPhase: beatGridPhase(from: selected, subdivision: subdivision),
+                    rng: &rng
+                ),
+                cap: Int(ceil(profile.maxNotesPerSecond))
+            )
         )
         let centroidValues = analysis.onsets.map(\.centroid).sorted()
         let groups = makeGroups(patternEvents, maxSimultaneous: profile.maxSimultaneous)
@@ -93,9 +100,14 @@ enum BeatmapGenerator {
             }
         }
 
-        let notes = removeDragSpanConflicts(
-            from: removeOverlaps(from: candidates)
-        ).enumerated().map { index, candidate in
+        let placedCandidates = enforcePlacementLimits(
+            from: removeOverlaps(from: candidates),
+            maxSimultaneous: profile.maxSimultaneous,
+            rng: &rng
+        )
+        let notes = removeDragSpanConflicts(from: placedCandidates)
+            .filter { $0.time >= minimumPlayableNoteTime }
+            .enumerated().map { index, candidate in
             Note(
                 id: makeID(seed: seed, index: index),
                 kind: candidate.kind,
@@ -154,11 +166,14 @@ enum BeatmapGenerator {
         _ onsets: [IndexedOnset],
         profile: DifficultyProfile
     ) -> [IndexedOnset] {
-        guard !onsets.isEmpty else { return [] }
-        let strengths = onsets.map { $0.onset.strength }.sorted()
+        let playableOnsets = onsets.filter {
+            $0.onset.time >= minimumPlayableNoteTime
+        }
+        guard !playableOnsets.isEmpty else { return [] }
+        let strengths = playableOnsets.map { $0.onset.strength }.sorted()
         let threshold = percentileValue(strengths, percentile: profile.strengthPercentile)
-        return onsets
-            .filter { $0.onset.strength >= threshold && $0.onset.time >= 0 }
+        return playableOnsets
+            .filter { $0.onset.strength >= threshold }
             .sorted {
                 if $0.onset.time == $1.onset.time {
                     return $0.index < $1.index
@@ -179,9 +194,9 @@ enum BeatmapGenerator {
     private static func makePatternEvents(
         from selected: [IndexedOnset],
         difficulty: Difficulty,
-        beat: TimeInterval,
         subdivision: TimeInterval,
         duration: TimeInterval,
+        beatPhase: TimeInterval,
         rng: inout SplitMix64
     ) -> [PatternEvent] {
         guard !selected.isEmpty, duration > 0 else { return [] }
@@ -190,7 +205,12 @@ enum BeatmapGenerator {
             PatternEvent(
                 identity: item.index,
                 source: item,
-                time: snappedTime(item.onset.time, subdivision: subdivision, duration: duration),
+                time: snappedTime(
+                    item.onset.time,
+                    subdivision: subdivision,
+                    duration: duration,
+                    phase: beatPhase
+                ),
                 isPrimary: true,
                 isChord: false
             )
@@ -200,49 +220,7 @@ enum BeatmapGenerator {
             return events.sorted(by: patternEventSort)
         }
 
-        let activeWindow: TimeInterval = switch difficulty {
-        case .normal:
-            beat * 1.5
-        case .hard:
-            beat * 2
-        case .hell:
-            beat * 2.5
-        case .heaven, .easy:
-            0
-        }
-        let primaryGridIndices = Set(events.map { gridIndex(for: $0.time, subdivision: subdivision) })
-        var occupiedGridIndices = primaryGridIndices
-        let firstGridIndex = gridIndex(for: events.map(\.time).min()!, subdivision: subdivision)
-        let lastGridIndex = gridIndex(for: events.map(\.time).max()!, subdivision: subdivision)
         var nextIdentity = selected.map(\.index).max() ?? 0
-
-        if firstGridIndex <= lastGridIndex {
-            for index in firstGridIndex...lastGridIndex where !occupiedGridIndices.contains(index) {
-                let time = Double(index) * subdivision
-                guard let source = selected.min(by: { lhs, rhs in
-                    let leftDistance = abs(lhs.onset.time - time)
-                    let rightDistance = abs(rhs.onset.time - time)
-                    if leftDistance == rightDistance {
-                        return lhs.index < rhs.index
-                    }
-                    return leftDistance < rightDistance
-                }), abs(source.onset.time - time) <= activeWindow else {
-                    continue
-                }
-
-                nextIdentity += 1
-                events.append(
-                    PatternEvent(
-                        identity: nextIdentity,
-                        source: source,
-                        time: time,
-                        isPrimary: false,
-                        isChord: false
-                    )
-                )
-                occupiedGridIndices.insert(index)
-            }
-        }
 
         if difficulty == .hell {
             let primaryEvents = events.filter(\.isPrimary)
@@ -258,10 +236,105 @@ enum BeatmapGenerator {
                         isChord: true
                     )
                 )
+                guard rng.nextDouble() < 0.35 else { continue }
+                nextIdentity += 1
+                events.append(
+                    PatternEvent(
+                        identity: nextIdentity,
+                        source: event.source,
+                        time: event.time,
+                        isPrimary: false,
+                        isChord: true
+                    )
+                )
             }
         }
 
         return events.sorted(by: patternEventSort)
+    }
+
+    private static func fallbackBeatOnsets(for analysis: AnalysisResult) -> [IndexedOnset] {
+        guard analysis.duration > minimumPlayableNoteTime, analysis.meanRMS > 0.01 else {
+            return []
+        }
+
+        let beat = beatDuration(for: analysis.tempo)
+        let firstBeat = ceil(minimumPlayableNoteTime / beat) * beat
+        guard firstBeat <= analysis.duration else { return [] }
+
+        var result: [IndexedOnset] = []
+        var time = firstBeat
+        var index = -1
+        while time <= analysis.duration + 1e-9 {
+            result.append(
+                IndexedOnset(
+                    index: index,
+                    onset: Onset(
+                        time: time,
+                        strength: 1,
+                        bass: analysis.meanBass,
+                        mid: analysis.meanMid,
+                        treble: analysis.meanTreble,
+                        centroid: 0
+                    )
+                )
+            )
+            time += beat
+            index -= 1
+        }
+        return result
+    }
+
+    private static func beatGridPhase(
+        from onsets: [IndexedOnset],
+        subdivision: TimeInterval
+    ) -> TimeInterval {
+        guard subdivision > 0, !onsets.isEmpty else { return 0 }
+
+        let resolution = 32
+        var bestPhase = 0.0
+        var bestScore = -Double.infinity
+        for step in 0..<resolution {
+            let phase = subdivision * Double(step) / Double(resolution)
+            let score = onsets.reduce(0.0) { total, item in
+                let nearestGrid = phase
+                    + ((item.onset.time - phase) / subdivision).rounded() * subdivision
+                let distance = abs(item.onset.time - nearestGrid)
+                let confidence = max(0, 1 - distance / (subdivision * 0.5))
+                return total + Double(item.onset.strength) * confidence
+            }
+            if score > bestScore {
+                bestScore = score
+                bestPhase = phase
+            }
+        }
+        return bestPhase
+    }
+
+    private static func enforceMinimumSequentialGap(
+        _ events: [PatternEvent]
+    ) -> [PatternEvent] {
+        let sorted = events.sorted(by: patternEventSort)
+        var result: [PatternEvent] = []
+        var index = 0
+        var lastTime: TimeInterval?
+
+        while index < sorted.count {
+            let start = index
+            index += 1
+            while index < sorted.count, abs(sorted[index].time - sorted[start].time) <= 1e-9 {
+                index += 1
+            }
+
+            let group = Array(sorted[start..<index])
+            if let lastTime, group[0].time - lastTime < minimumSequentialGap - 1e-9 {
+                continue
+            }
+            result.append(contentsOf: group)
+            lastTime = group[0].time
+        }
+
+        return result
     }
 
     private static func cullByRate(
@@ -286,11 +359,11 @@ enum BeatmapGenerator {
             let windowStart = group[0].time - 1
             active.removeAll { $0.time <= windowStart }
             let chordPair = group.filter { !$0.isChord }.prefix(1)
-                + group.filter(\.isChord).prefix(1)
-            let toKeep = chordPair.count == 2 ? Array(chordPair) : Array(group.prefix(1))
+                + group.filter(\.isChord).prefix(2)
+            let toKeep = chordPair.count > 1 ? Array(chordPair) : Array(group.prefix(1))
             var available = cap - active.count
 
-            if toKeep.count > available, chordPair.count == 2 {
+            if toKeep.count > available, chordPair.count > 1 {
                 let removable = active
                     .filter { !$0.isChord }
                     .sorted { $0.time < $1.time }
@@ -388,6 +461,70 @@ enum BeatmapGenerator {
             groups.append(Array(group.prefix(maxSimultaneous)))
         }
         return groups
+    }
+
+    private static func enforcePlacementLimits(
+        from candidates: [GeneratedNote],
+        maxSimultaneous: Int,
+        rng: inout SplitMix64
+    ) -> [GeneratedNote] {
+        guard maxSimultaneous > 0 else { return [] }
+
+        let sorted = candidates.sorted(by: generatedNoteSort)
+        var result: [GeneratedNote] = []
+        var index = 0
+
+        while index < sorted.count {
+            let start = index
+            index += 1
+            while index < sorted.count, abs(sorted[index].time - sorted[start].time) <= 1e-9 {
+                index += 1
+            }
+
+            let group = Array(sorted[start..<index])
+            let time = group[0].time
+            // ponytail: linear active-drag scan, replace with an interval index only if chart size makes generation measurable.
+            let activeDrags = result.filter { isDragActive($0, at: time) }
+            let availableSlots = max(0, maxSimultaneous - activeDrags.count)
+            let availableDragSlots = min(availableSlots, max(0, 2 - activeDrags.count))
+            let groupDrags = group.filter { $0.kind == .drag }
+            let keptDrags = Array(groupDrags.prefix(availableDragSlots))
+            let activeAndKeptDrags = activeDrags + keptDrags
+            var usedSlots = activeDrags.count + keptDrags.count
+
+            result.append(contentsOf: keptDrags)
+
+            for tap in group where tap.kind == .tap {
+                guard usedSlots < maxSimultaneous,
+                      !tapConflictsWithDragSpan(tap, drags: activeAndKeptDrags) else {
+                    continue
+                }
+                result.append(tap)
+                usedSlots += 1
+            }
+
+            for drag in groupDrags.dropFirst(keptDrags.count) {
+                guard activeDrags.count + keptDrags.count >= 2 else { continue }
+                let shouldConvert = rng.nextDouble() < 0.75
+                guard shouldConvert,
+                      usedSlots < maxSimultaneous,
+                      !tapConflictsWithDragSpan(drag, drags: activeAndKeptDrags) else {
+                    continue
+                }
+                result.append(
+                    GeneratedNote(
+                        kind: .tap,
+                        time: drag.time,
+                        lane: drag.lane,
+                        duration: 0,
+                        lanePath: []
+                    )
+                )
+                usedSlots += 1
+            }
+        }
+
+        return result.sorted(by: generatedNoteSort)
     }
 
     private static func nextOnset(
@@ -500,16 +637,29 @@ enum BeatmapGenerator {
         let drags = candidates.filter { $0.kind == .drag }
         return candidates.filter { candidate in
             guard candidate.kind == .tap else { return true }
-            return !drags.contains { drag in
-                let dragLanes = [drag.lane] + drag.lanePath.map { Int($0.lane.rounded()) }
-                let minimumLane = dragLanes.min()!
-                let maximumLane = dragLanes.max()!
-                let dragEnd = drag.time + drag.duration
-                let isActive = candidate.time >= drag.time - 1e-9
-                    && candidate.time <= dragEnd + 1e-9
-                return isActive && candidate.lane >= minimumLane && candidate.lane <= maximumLane
-            }
+            return !tapConflictsWithDragSpan(candidate, drags: drags)
         }
+    }
+
+    private static func tapConflictsWithDragSpan(
+        _ tap: GeneratedNote,
+        drags: [GeneratedNote]
+    ) -> Bool {
+        drags.contains { drag in
+            let dragLanes = [drag.lane] + drag.lanePath.map { Int($0.lane.rounded()) }
+            let minimumLane = dragLanes.min()!
+            let maximumLane = dragLanes.max()!
+            let dragEnd = drag.time + drag.duration
+            let isActive = tap.time >= drag.time - 1e-9
+                && tap.time <= dragEnd + 1e-9
+            return isActive && tap.lane >= minimumLane && tap.lane <= maximumLane
+        }
+    }
+
+    private static func isDragActive(_ candidate: GeneratedNote, at time: TimeInterval) -> Bool {
+        guard candidate.kind == .drag else { return false }
+        return time >= candidate.time - 1e-9
+            && time < candidate.time + candidate.duration - 1e-9
     }
 
     private static func generatedNoteSort(_ lhs: GeneratedNote, _ rhs: GeneratedNote) -> Bool {
@@ -540,9 +690,13 @@ enum BeatmapGenerator {
     private static func snappedTime(
         _ time: TimeInterval,
         subdivision: TimeInterval,
-        duration: TimeInterval
+        duration: TimeInterval,
+        phase: TimeInterval
     ) -> TimeInterval {
-        min(duration, max(0, Double(Int(round(time / subdivision))) * subdivision))
+        let snapped = phase + ((time - phase) / subdivision).rounded() * subdivision
+        let tolerance = min(subdivision * 0.25, 0.06)
+        let resolved = abs(snapped - time) <= tolerance ? snapped : time
+        return min(duration, max(0, resolved))
     }
 
     private static func gridIndex(for time: TimeInterval, subdivision: TimeInterval) -> Int {

@@ -233,6 +233,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         func markActivated() {
             state = .active
             fingerOn = true
+            crest.isHidden = false
+            crest.position = point(at: 0)
         }
 
         func setFingerOn(_ isOn: Bool) {
@@ -281,13 +283,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             hitLineY: CGFloat,
             sceneHeight: CGFloat
         ) {
-            position.y = hitLineY + CGFloat(note.time - playbackTime) * scrollSpeed
+            let positions = GameplayLayout.ribbonPositions(
+                hitLineY: hitLineY,
+                timeToHit: note.time - playbackTime,
+                duration: note.duration,
+                scrollSpeed: scrollSpeed
+            )
+            position.y = positions.head
 
             if state == .pending, playbackTime > note.time + 0.150 {
                 markInactive()
             }
 
-            let endY = position.y - CGFloat(note.duration) * scrollSpeed
+            let endY = positions.tail
             let visibilityPadding = capHeight * 0.5
             let visible = max(position.y, endY) >= -visibilityPadding
                 && min(position.y, endY) <= sceneHeight + visibilityPadding
@@ -322,7 +330,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 offset: offset,
                 point: CGPoint(
                     x: laneOriginX + (CGFloat(lane(at: offset)) + 0.5) * laneWidth,
-                    y: -CGFloat(offset) * scrollSpeed
+                    y: CGFloat(offset) * scrollSpeed
                 )
             )
         }
@@ -544,7 +552,6 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let rippleColor: SKColor
     private let judgmentAccentColor: SKColor
     private let scrollSpeed: CGFloat
-    private let lastNoteTime: TimeInterval?
     private let laneCount: Int
 
     private var noteNodes: [TapNoteNode] = []
@@ -571,6 +578,8 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var laneAreaRect = CGRect.zero
     private var laneWidth: CGFloat = 0
     private var hitLineY: CGFloat = 0
+    private var scrollSpeedMultiplier: CGFloat = 1
+    private var lifeGaugeHeight: CGFloat = 0
     private var nextRippleIndex = 0
     private var nextRippleSpawnTime: TimeInterval = 0.25
     private var sceneStartTime: TimeInterval?
@@ -619,10 +628,10 @@ final class GameScene: SKScene, @unchecked Sendable {
         rippleColor = makeColor(for: selectedTheme.ripple)
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
-        lastNoteTime = beatmap.notes.map(\.time).max()
         laneCount = min(max(beatmap.laneCount, 4), 7)
         super.init(size: CGSize(width: 1, height: 1))
         scaleMode = .resizeFill
+        isUserInteractionEnabled = true
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -741,6 +750,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         latestJudgmentLabel.fontColor = judgmentAccentColor
         latestJudgmentLabel.horizontalAlignmentMode = .center
         latestJudgmentLabel.verticalAlignmentMode = .center
+        latestJudgmentLabel.alpha = 0
         latestJudgmentLabel.zPosition = 12
 
         scoreCaptionLabel.text = "점수"
@@ -831,7 +841,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 hitLineY: hitLineY,
                 laneOriginX: laneAreaRect.minX,
                 laneWidth: laneWidth,
-                scrollSpeed: scrollSpeed,
+                scrollSpeed: currentScrollSpeed,
                 sceneHeight: size.height
             )
         }
@@ -843,7 +853,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             )
         }
 
-        if playbackFinished() || (lastNoteTime.map { time >= $0 + 2 } ?? false) {
+        if playbackFinished() {
             hasCompleted = true
             onComplete(false)
         }
@@ -908,6 +918,17 @@ final class GameScene: SKScene, @unchecked Sendable {
         updateEndedDragTouch(in: touches)
     }
 
+    func setScrollSpeedMultiplier(_ multiplier: CGFloat) {
+        scrollSpeedMultiplier = min(max(multiplier, 0.5), 1.25)
+        for node in ribbonNodes {
+            node.updateLayout(
+                laneOriginX: laneAreaRect.minX,
+                laneWidth: laneWidth,
+                scrollSpeed: currentScrollSpeed
+            )
+        }
+    }
+
     private func updateLayout() {
         guard size.width > 0, size.height > 0 else { return }
 
@@ -922,17 +943,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             transform: nil
         )
 
-        let sideGutter = min(max(size.width * 0.12, 72), 110)
-        let usableWidth = min(
-            size.width,
-            max(size.width - sideGutter * 2, size.width * 0.55)
-        )
-        laneAreaRect = CGRect(
-            x: (size.width - usableWidth) / 2,
-            y: 0,
-            width: usableWidth,
-            height: size.height
-        )
+        laneAreaRect = GameplayLayout.laneAreaRect(in: size)
+        let usableWidth = laneAreaRect.width
         laneWidth = usableWidth / CGFloat(laneCount)
         let laneFillColor = makeColor(for: theme.laneFill)
         for (index, lane) in laneFillNodes.enumerated() {
@@ -951,7 +963,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 : CGFloat(theme.laneFillAlpha * 0.6)
         }
 
-        hitLineY = size.height * 0.12
+        hitLineY = GameplayLayout.hitLineY(in: size)
         let hitLinePath = CGMutablePath()
         hitLinePath.move(to: CGPoint(x: laneAreaRect.minX, y: hitLineY))
         hitLinePath.addLine(to: CGPoint(x: laneAreaRect.maxX, y: hitLineY))
@@ -995,14 +1007,16 @@ final class GameScene: SKScene, @unchecked Sendable {
             ripple.position = rippleCenter
         }
 
-        comboCaptionLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - 20)
-        comboValueLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - 54)
-        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - 78)
+        let hudTopMargin = max(size.height * 0.06, 54)
+        comboCaptionLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin)
+        comboValueLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 48)
+        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 96)
         scoreCaptionLabel.position = CGPoint(x: laneAreaRect.minX / 2, y: size.height * 0.10 + 16)
         scoreValueLabel.position = CGPoint(x: laneAreaRect.minX / 2, y: size.height * 0.10 - 10)
 
         let lifeCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
         let gaugeHeight = min(max(size.height * 0.45, 100), 190)
+        lifeGaugeHeight = gaugeHeight
         let gaugeBottom = size.height * 0.18
         let gaugePath = CGPath(
             roundedRect: CGRect(x: -8, y: 0, width: 16, height: gaugeHeight),
@@ -1023,14 +1037,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             node.updateLayout(
                 laneOriginX: laneAreaRect.minX,
                 laneWidth: laneWidth,
-                scrollSpeed: scrollSpeed
+                scrollSpeed: currentScrollSpeed
             )
         }
         for node in hitPopNodes {
             node.updateLayout(noteWidth: laneWidth * 0.62)
         }
 
+        lastRenderedLife = nil
         updateHUD()
+    }
+
+    private var currentScrollSpeed: CGFloat {
+        scrollSpeed * scrollSpeedMultiplier
     }
 
     private func frameDelta(at currentTime: TimeInterval) -> TimeInterval {
@@ -1240,6 +1259,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         if let activeDragNoteID, let ribbon = ribbonNode(for: activeDragNoteID) {
             ribbon.setFingerOn(false)
         }
+        processDragTick(at: playbackTime())
     }
 
     private func clearActiveDrag() {
@@ -1323,7 +1343,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         let life = judgmentEngine.life
         if life != lastRenderedLife {
             let fraction = CGFloat(min(max(life, 0), 100)) / 100
-            let bounds = lifeGaugeTrack.path?.boundingBox ?? .zero
+            let bounds = CGRect(x: -8, y: 0, width: 16, height: lifeGaugeHeight)
             lifeGaugeFill.path = CGPath(
                 roundedRect: CGRect(
                     x: bounds.minX,

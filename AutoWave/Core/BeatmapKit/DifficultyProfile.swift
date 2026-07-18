@@ -54,7 +54,7 @@ struct DifficultyProfile: Sendable {
                 laneCount: 7,
                 maxNotesPerSecond: 9.5,
                 strengthPercentile: 8,
-                maxSimultaneous: 2,
+                maxSimultaneous: 3,
                 dragRatio: 0.30,
                 movingDragRatio: 0.8,
                 scrollSpeed: 640
