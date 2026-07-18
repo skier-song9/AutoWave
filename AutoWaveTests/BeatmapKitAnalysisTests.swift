@@ -26,6 +26,22 @@ final class BeatmapKitAnalysisTests: XCTestCase {
         XCTAssertEqual(result.tempo, 120, accuracy: 3)
     }
 
+    func testLongClickTrackPreservesOnsetsAndBeatmapNotesNearFileEnd() async throws {
+        let fixtureURL = try makeWAVFixture(duration: 120) { time in
+            let offset = time.truncatingRemainder(dividingBy: 0.5)
+            guard offset < 0.005 else { return 0 }
+            return 0.9 * Float(1 - offset / 0.005)
+        }
+        defer { try? FileManager.default.removeItem(at: fixtureURL) }
+
+        let result = try await BeatmapKit.analyze(fileAt: fixtureURL, progress: nil)
+        let hell = BeatmapGenerator.generate(from: result, difficulty: .hell, seed: 42)
+
+        XCTAssertEqual(result.duration, 120, accuracy: 0.2)
+        XCTAssertTrue(result.onsets.contains { $0.time >= 110 })
+        XCTAssertTrue(hell.notes.contains { $0.time > 100 })
+    }
+
     func testSustainedSineProducesAtMostTwoOnsets() async throws {
         let fixtureURL = try makeWAVFixture(duration: 10) { time in
             0.35 * Float(sin(2 * Double.pi * 440 * time))

@@ -88,6 +88,44 @@ final class GameplayStartRegressionTests: XCTestCase {
             }
         }
 
+        // A fully missed run must render the life-zero state without rebuilding an invalid path.
+        let lifeZeroNotes = (0..<21).map { index in
+            Note(
+                id: UUID(),
+                kind: .tap,
+                time: Double(index) * 0.01,
+                lane: 0,
+                duration: 0,
+                lanePath: []
+            )
+        }
+        let lifeZeroBeatmap = Beatmap(
+            difficulty: .normal,
+            tempo: 120,
+            notes: lifeZeroNotes,
+            palette: generated.palette,
+            generatorVersion: generated.generatorVersion,
+            themeID: generated.themeID,
+            laneCount: generated.laneCount
+        )
+        let lifeZeroEngine = JudgmentEngine(notes: lifeZeroNotes)
+        let lifeZeroScene = GameScene(
+            beatmap: lifeZeroBeatmap,
+            difficulty: .normal,
+            judgmentEngine: lifeZeroEngine,
+            visualizerTap: VisualizerTap(),
+            playbackTime: { 1 },
+            playbackFinished: { false },
+            audioDuration: seconds,
+            onComplete: { _ in },
+            onHaptic: { _ in }
+        )
+        view.presentScene(lifeZeroScene)
+        renderQueue.sync {
+            lifeZeroScene.update(1)
+        }
+        XCTAssertTrue(lifeZeroEngine.isGameOver)
+
         _ = completed
         viewModel.stop()
     }

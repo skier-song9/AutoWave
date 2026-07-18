@@ -134,6 +134,8 @@ private struct GameplaySessionView: View {
                     Text("라이브러리로 돌아가 다시 시도해 주세요.")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.7))
+                    Button("라이브러리로", action: onExit)
+                        .buttonStyle(.borderedProminent)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(.black)

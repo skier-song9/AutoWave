@@ -166,6 +166,9 @@ final class GameplayViewModel {
                 playbackFinished: {
                     clock.isFinished
                 },
+                audioDuration: newAudioFile.processingFormat.sampleRate > 0
+                    ? Double(newAudioFile.length) / newAudioFile.processingFormat.sampleRate
+                    : 0,
                 onComplete: { [weak self] failed in
                     Task { @MainActor [weak self] in
                         self?.complete(

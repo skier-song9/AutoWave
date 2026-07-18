@@ -14,6 +14,23 @@ enum GameplayLayout {
         )
     }
 
+    static func laneCoordinate(
+        for point: CGPoint,
+        in laneAreaRect: CGRect,
+        laneWidth: CGFloat
+    ) -> Double? {
+        guard laneWidth > 0 else { return nil }
+
+        let tolerance = laneWidth * 0.5
+        guard point.x >= laneAreaRect.minX - tolerance,
+              point.x <= laneAreaRect.maxX + tolerance else {
+            return nil
+        }
+
+        let x = min(max(point.x, laneAreaRect.minX), laneAreaRect.maxX)
+        return Double((x - laneAreaRect.minX) / laneWidth - 0.5)
+    }
+
     static func hitLineY(in size: CGSize) -> CGFloat {
         max(size.height * 0.18, 72)
     }

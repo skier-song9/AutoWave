@@ -553,6 +553,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let judgmentAccentColor: SKColor
     private let scrollSpeed: CGFloat
     private let laneCount: Int
+    private let completionFallbackTime: TimeInterval
 
     private var noteNodes: [TapNoteNode] = []
     private var ribbonNodes: [RibbonNode] = []
@@ -579,7 +580,6 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var laneWidth: CGFloat = 0
     private var hitLineY: CGFloat = 0
     private var scrollSpeedMultiplier: CGFloat = 1
-    private var lifeGaugeHeight: CGFloat = 0
     private var nextRippleIndex = 0
     private var nextRippleSpawnTime: TimeInterval = 0.25
     private var sceneStartTime: TimeInterval?
@@ -587,7 +587,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var hasCompleted = false
     private var visualizerBands = [Float](repeating: 0, count: VisualizerTap.bandCount)
     private var visualizerGeneration: UInt64 = 0
-    private var activeDragTouch: UITouch?
+    private var activeDragTouchID: ObjectIdentifier?
     private var activeDragNoteID: UUID?
     private var activeDragTouchLane: Double?
     private var nextDragTickTime: TimeInterval?
@@ -599,8 +599,11 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var comboPulseRemaining: TimeInterval = 0
     private var gameOverFlashRemaining: TimeInterval = 0
     private var isGameOverPending = false
+    private var latestJudgmentTime: TimeInterval?
     private var lastFrameDelta: TimeInterval = 0
     private let gameOverFlashDuration: TimeInterval = 0.32
+    private let judgmentFadeDelay: TimeInterval = 0.6
+    private let judgmentFadeDuration: TimeInterval = 0.2
     init(
         beatmap: Beatmap,
         difficulty: Difficulty,
@@ -608,6 +611,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         visualizerTap: VisualizerTap,
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool,
+        audioDuration: TimeInterval,
         onComplete: @escaping (Bool) -> Void,
         onHaptic: @escaping (GameplayHaptic) -> Void
     ) {
@@ -629,6 +633,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
         laneCount = min(max(beatmap.laneCount, 4), 7)
+        let lastNoteTime = beatmap.notes.reduce(0) { max($0, $1.time) }
+        completionFallbackTime = max(audioDuration, lastNoteTime) + 2
         super.init(size: CGSize(width: 1, height: 1))
         scaleMode = .resizeFill
         isUserInteractionEnabled = true
@@ -639,6 +645,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     override func didMove(to view: SKView) {
+        view.isMultipleTouchEnabled = true
         backgroundColor = makeColor(for: theme.backgroundBottom)
 
         for index in 0..<16 {
@@ -812,6 +819,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         let delta = frameDelta(at: currentTime)
         if isGameOverPending {
             updateGameOverFlash(delta: delta)
+            updateJudgmentLabel(at: currentTime)
             return
         }
 
@@ -824,7 +832,14 @@ final class GameScene: SKScene, @unchecked Sendable {
         updateRippleField(at: currentTime, delta: delta)
         let time = playbackTime()
         judgmentEngine.advance(to: time) { [self] result in
-            showJudgment(result)
+            showJudgment(result, at: currentTime)
+        }
+
+        updateHUD()
+        if judgmentEngine.isGameOver {
+            beginGameOver()
+            updateJudgmentLabel(at: currentTime)
+            return
         }
 
         advanceDragTicks(to: time)
@@ -853,60 +868,70 @@ final class GameScene: SKScene, @unchecked Sendable {
             )
         }
 
-        if playbackFinished() {
+        updateJudgmentLabel(at: currentTime)
+
+        if playbackFinished() || time >= completionFallbackTime {
             hasCompleted = true
             onComplete(false)
         }
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first, size.width > 0 else { return }
+        guard !isGameOverPending, !hasCompleted, !judgmentEngine.isGameOver,
+              size.width > 0 else { return }
 
-        let location = touch.location(in: self)
-        let touchLane = laneCoordinate(for: location)
         let time = playbackTime()
+        for touch in touches {
+            guard let touchLane = laneCoordinate(for: touch.location(in: self)) else {
+                continue
+            }
 
-        if activeDragNoteID == nil,
-           let ribbon = nearestRibbon(at: time, touchLane: touchLane),
-           let result = judgmentEngine.beginDrag(
-               noteID: ribbon.note.id,
-               touchLane: touchLane,
-               at: time
-           ) {
-            ribbon.markActivated()
-            activeDragTouch = touch
-            activeDragNoteID = ribbon.note.id
-            activeDragTouchLane = touchLane
-            let lane = laneIndex(for: ribbon.note.lane)
-            flashReceptor(lane)
-            showJudgment(result)
+            if activeDragNoteID == nil,
+               let ribbon = nearestRibbon(at: time, touchLane: touchLane),
+               let result = judgmentEngine.beginDrag(
+                   noteID: ribbon.note.id,
+                   touchLane: touchLane,
+                   at: time
+               ) {
+                ribbon.markActivated()
+                activeDragTouchID = ObjectIdentifier(touch)
+                activeDragNoteID = ribbon.note.id
+                activeDragTouchLane = touchLane
+                let lane = laneIndex(for: ribbon.note.lane)
+                flashReceptor(lane)
+                showJudgment(result, at: CACurrentMediaTime())
+                if result.judgment != .miss {
+                    showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
+                }
+                continue
+            }
+
+            let lane = laneIndex(for: touchLane)
+
+            guard let result = judgmentEngine.tap(lane: lane, at: time) else { continue }
+
+            consumeNearestVisual(lane: lane, at: time)
+            showJudgment(result, at: CACurrentMediaTime())
             if result.judgment != .miss {
+                flashReceptor(lane)
                 showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
             }
-            return
-        }
-
-        let lane = laneIndex(for: location)
-
-        guard let result = judgmentEngine.tap(lane: lane, at: time) else { return }
-
-        consumeNearestVisual(lane: lane, at: time)
-        showJudgment(result)
-        if result.judgment != .miss {
-            flashReceptor(lane)
-            showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
         }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let activeDragTouch, touches.contains(where: { $0 === activeDragTouch }) else {
-            return
-        }
+        guard !isGameOverPending, !hasCompleted, !judgmentEngine.isGameOver else { return }
 
-        let location = activeDragTouch.location(in: self)
-        activeDragTouchLane = laneCoordinate(for: location)
-        if let activeDragNoteID, let ribbon = ribbonNode(for: activeDragNoteID) {
-            ribbon.setFingerOn(true)
+        for touch in touches {
+            guard let activeDragTouchID,
+                  ObjectIdentifier(touch) == activeDragTouchID else {
+                continue
+            }
+
+            activeDragTouchLane = laneCoordinate(for: touch.location(in: self))
+            if let activeDragNoteID, let ribbon = ribbonNode(for: activeDragNoteID) {
+                ribbon.setFingerOn(activeDragTouchLane != nil)
+            }
         }
     }
 
@@ -1016,15 +1041,17 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         let lifeCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
         let gaugeHeight = min(max(size.height * 0.45, 100), 190)
-        lifeGaugeHeight = gaugeHeight
         let gaugeBottom = size.height * 0.18
+        let gaugeRect = CGRect(x: -8, y: 0, width: 16, height: gaugeHeight)
+        let gaugeCornerRadius = min(8, min(gaugeRect.width, gaugeRect.height) / 2)
         let gaugePath = CGPath(
-            roundedRect: CGRect(x: -8, y: 0, width: 16, height: gaugeHeight),
-            cornerWidth: 8,
-            cornerHeight: 8,
+            roundedRect: gaugeRect,
+            cornerWidth: gaugeCornerRadius,
+            cornerHeight: gaugeCornerRadius,
             transform: nil
         )
         lifeGaugeTrack.path = gaugePath
+        lifeGaugeFill.path = gaugePath
         lifeGaugeTrack.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
         lifeGaugeFill.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
         lifeCaptionLabel.position = CGPoint(x: lifeCenterX, y: gaugeBottom + gaugeHeight + 16)
@@ -1172,18 +1199,23 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private func advanceDragTicks(to time: TimeInterval) {
+        guard !isGameOverPending, !hasCompleted, !judgmentEngine.isGameOver else { return }
+
         if nextDragTickTime == nil {
             nextDragTickTime = (floor(time / dragTickInterval) + 1) * dragTickInterval
         }
 
-        while let tickTime = nextDragTickTime, tickTime <= time + 0.000_000_001 {
+        while !judgmentEngine.isGameOver,
+              let tickTime = nextDragTickTime,
+              tickTime <= time + 0.000_000_001 {
             processDragTick(at: tickTime)
             nextDragTickTime = tickTime + dragTickInterval
         }
     }
 
     private func processDragTick(at time: TimeInterval) {
-        guard let noteID = activeDragNoteID else { return }
+        guard !isGameOverPending, !hasCompleted, !judgmentEngine.isGameOver,
+              let noteID = activeDragNoteID else { return }
 
         let result = judgmentEngine.dragTick(
             noteID: noteID,
@@ -1229,14 +1261,12 @@ final class GameScene: SKScene, @unchecked Sendable {
         ribbonNodes.first { $0.note.id == noteID }
     }
 
-    private func laneCoordinate(for point: CGPoint) -> Double {
-        guard laneWidth > 0 else { return 0 }
-        let x = min(max(point.x, laneAreaRect.minX), laneAreaRect.maxX)
-        return Double((x - laneAreaRect.minX) / laneWidth - 0.5)
-    }
-
-    private func laneIndex(for point: CGPoint) -> Int {
-        laneIndex(for: laneCoordinate(for: point))
+    private func laneCoordinate(for point: CGPoint) -> Double? {
+        GameplayLayout.laneCoordinate(
+            for: point,
+            in: laneAreaRect,
+            laneWidth: laneWidth
+        )
     }
 
     private func laneIndex(for coordinate: Double) -> Int {
@@ -1251,19 +1281,25 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private func updateEndedDragTouch(in touches: Set<UITouch>) {
-        guard let activeDragTouch, touches.contains(where: { $0 === activeDragTouch }) else {
-            return
-        }
+        guard !isGameOverPending, !hasCompleted, !judgmentEngine.isGameOver else { return }
 
-        activeDragTouchLane = nil
-        if let activeDragNoteID, let ribbon = ribbonNode(for: activeDragNoteID) {
-            ribbon.setFingerOn(false)
+        for touch in touches {
+            guard let activeDragTouchID,
+                  ObjectIdentifier(touch) == activeDragTouchID else {
+                continue
+            }
+
+            activeDragTouchLane = nil
+            if let activeDragNoteID, let ribbon = ribbonNode(for: activeDragNoteID) {
+                ribbon.setFingerOn(false)
+            }
+            processDragTick(at: playbackTime())
+            break
         }
-        processDragTick(at: playbackTime())
     }
 
     private func clearActiveDrag() {
-        activeDragTouch = nil
+        activeDragTouchID = nil
         activeDragNoteID = nil
         activeDragTouchLane = nil
     }
@@ -1283,7 +1319,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         nearest?.isHidden = true
     }
 
-    private func showJudgment(_ result: JudgmentResult) {
+    private func showJudgment(_ result: JudgmentResult, at time: TimeInterval) {
         let judgmentText: String
         switch result.judgment {
         case .perfect:
@@ -1304,8 +1340,25 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         latestJudgmentLabel.text = judgmentText
         latestJudgmentLabel.alpha = 1
+        latestJudgmentTime = time
         comboPulseRemaining = 0.18
         comboValueLabel.setScale(1.12)
+    }
+
+    private func updateJudgmentLabel(at time: TimeInterval) {
+        guard let latestJudgmentTime else { return }
+
+        let elapsed = max(time - latestJudgmentTime, 0)
+        guard elapsed > judgmentFadeDelay else {
+            latestJudgmentLabel.alpha = 1
+            return
+        }
+
+        let fade = 1 - min((elapsed - judgmentFadeDelay) / judgmentFadeDuration, 1)
+        latestJudgmentLabel.alpha = CGFloat(fade)
+        if fade <= 0 {
+            self.latestJudgmentTime = nil
+        }
     }
 
     private func showHitPop(at point: CGPoint, judgment: Judgment) {
@@ -1341,22 +1394,16 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         let life = judgmentEngine.life
-        if life != lastRenderedLife {
-            let fraction = CGFloat(min(max(life, 0), 100)) / 100
-            let bounds = CGRect(x: -8, y: 0, width: 16, height: lifeGaugeHeight)
-            lifeGaugeFill.path = CGPath(
-                roundedRect: CGRect(
-                    x: bounds.minX,
-                    y: bounds.minY,
-                    width: bounds.width,
-                    height: bounds.height * fraction
-                ),
-                cornerWidth: 8,
-                cornerHeight: 8,
-                transform: nil
-            )
+        if life <= 0 {
+            lifeGaugeFill.yScale = 0
+            lifeGaugeFill.isHidden = true
+            lastRenderedLife = life
+        } else if life != lastRenderedLife {
+            let fraction = CGFloat(life) / 100
+            lifeGaugeFill.xScale = 1
+            lifeGaugeFill.yScale = fraction
             lifeGaugeFill.fillColor = lifeGaugeColor(for: fraction)
-            lifeGaugeFill.isHidden = life <= 0
+            lifeGaugeFill.isHidden = false
             lastRenderedLife = life
         }
 
@@ -1388,6 +1435,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private func beginGameOver() {
         guard !isGameOverPending else { return }
         isGameOverPending = true
+        clearActiveDrag()
         gameOverFlashRemaining = gameOverFlashDuration
         gameOverLabel.isHidden = false
         gameOverLabel.alpha = 1

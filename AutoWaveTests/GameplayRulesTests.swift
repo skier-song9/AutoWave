@@ -10,6 +10,34 @@ final class GameplayRulesTests: XCTestCase {
         XCTAssertEqual(rect.midX, 500, accuracy: 0.001)
     }
 
+    func testLaneCoordinateRejectsScoreAndLifeGutters() {
+        let size = CGSize(width: 1_000, height: 500)
+        let laneArea = GameplayLayout.laneAreaRect(in: size)
+        let laneWidth = laneArea.width / 4
+
+        XCTAssertNil(
+            GameplayLayout.laneCoordinate(
+                for: CGPoint(x: 40, y: 250),
+                in: laneArea,
+                laneWidth: laneWidth
+            )
+        )
+        XCTAssertNil(
+            GameplayLayout.laneCoordinate(
+                for: CGPoint(x: 960, y: 250),
+                in: laneArea,
+                laneWidth: laneWidth
+            )
+        )
+        XCTAssertNotNil(
+            GameplayLayout.laneCoordinate(
+                for: CGPoint(x: laneArea.minX - laneWidth * 0.25, y: 250),
+                in: laneArea,
+                laneWidth: laneWidth
+            )
+        )
+    }
+
     func testRibbonTailTrailsBehindTheHitHead() {
         let positions = GameplayLayout.ribbonPositions(
             hitLineY: 100,
