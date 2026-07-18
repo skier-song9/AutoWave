@@ -140,8 +140,12 @@ private struct TrackRow: View {
     }
 }
 
+@MainActor
 private struct DifficultyPickerView: View {
+    @Environment(\.modelContext) private var modelContext
     let track: TrackEntity
+    @State private var regenerationViewModel = AnalysisViewModel()
+    @State private var isRegenerating = true
 
     var body: some View {
         List {
@@ -165,9 +169,26 @@ private struct DifficultyPickerView: View {
                 }
             }
         }
+        .disabled(isRegenerating)
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity)
         .navigationTitle("난이도 선택")
+        .overlay {
+            if isRegenerating {
+                ProgressView("최신 비트맵 준비 중…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .task(id: track.persistentModelID) {
+            guard AnalysisViewModel.needsRegeneration(for: track.beatmaps) else {
+                isRegenerating = false
+                return
+            }
+            isRegenerating = true
+            await regenerationViewModel.start(track: track, context: modelContext)
+            isRegenerating = false
+        }
     }
 
     private func difficultyRow(for difficulty: Difficulty, isAvailable: Bool) -> some View {

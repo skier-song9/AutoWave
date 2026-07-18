@@ -101,7 +101,23 @@ final class BeatmapKitAnalysisTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(highOnsets.count, 4)
         XCTAssertTrue(lowOnsets.allSatisfy { $0.bass > $0.treble })
         XCTAssertTrue(highOnsets.allSatisfy { $0.treble > $0.bass })
+        XCTAssertTrue(lowOnsets.allSatisfy { $0.band == .low })
+        XCTAssertTrue(highOnsets.allSatisfy { $0.band == .high })
         XCTAssertGreaterThan(result.meanBass, result.meanTreble)
+    }
+
+    func testVibratoSuppressionRejectsSustainedFrequencyWobble() async throws {
+        let fixtureURL = try makeWAVFixture(duration: 10) { time in
+            let vibratoRate = 6.0
+            let phase = 2 * Double.pi * 440 * time
+                + 25 / vibratoRate * (1 - cos(2 * Double.pi * vibratoRate * time))
+            return 0.35 * Float(sin(phase))
+        }
+        defer { try? FileManager.default.removeItem(at: fixtureURL) }
+
+        let result = try await BeatmapKit.analyze(fileAt: fixtureURL, progress: nil)
+
+        XCTAssertLessThanOrEqual(result.onsets.count, 2)
     }
 
     private func isBurstStart(_ time: TimeInterval, sectionParity: Int) -> Bool {

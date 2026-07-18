@@ -17,7 +17,7 @@ struct DifficultyProfile: Sendable {
                 maxSimultaneous: 1,
                 dragRatio: 0.10,
                 movingDragRatio: 0.0,
-                scrollSpeed: 260
+                scrollSpeed: 220
             )
         case .easy:
             DifficultyProfile(
@@ -27,7 +27,7 @@ struct DifficultyProfile: Sendable {
                 maxSimultaneous: 1,
                 dragRatio: 0.15,
                 movingDragRatio: 0.2,
-                scrollSpeed: 330
+                scrollSpeed: 280
             )
         case .normal:
             DifficultyProfile(
@@ -37,7 +37,7 @@ struct DifficultyProfile: Sendable {
                 maxSimultaneous: 2,
                 dragRatio: 0.20,
                 movingDragRatio: 0.4,
-                scrollSpeed: 420
+                scrollSpeed: 360
             )
         case .hard:
             DifficultyProfile(
@@ -47,7 +47,7 @@ struct DifficultyProfile: Sendable {
                 maxSimultaneous: 2,
                 dragRatio: 0.25,
                 movingDragRatio: 0.6,
-                scrollSpeed: 520
+                scrollSpeed: 440
             )
         case .hell:
             DifficultyProfile(
@@ -57,7 +57,7 @@ struct DifficultyProfile: Sendable {
                 maxSimultaneous: 3,
                 dragRatio: 0.30,
                 movingDragRatio: 0.8,
-                scrollSpeed: 640
+                scrollSpeed: 545
             )
         }
     }

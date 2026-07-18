@@ -8,6 +8,31 @@ struct SpectralFrame: Sendable {
     var treble: Float
     var centroid: Float
     var rms: Float
+    var lowFlux: Float
+    var midFlux: Float
+    var highFlux: Float
+
+    init(
+        flux: Float,
+        bass: Float,
+        mid: Float,
+        treble: Float,
+        centroid: Float,
+        rms: Float,
+        lowFlux: Float = 0,
+        midFlux: Float = 0,
+        highFlux: Float = 0
+    ) {
+        self.flux = flux
+        self.bass = bass
+        self.mid = mid
+        self.treble = treble
+        self.centroid = centroid
+        self.rms = rms
+        self.lowFlux = lowFlux
+        self.midFlux = midFlux
+        self.highFlux = highFlux
+    }
 }
 
 struct SpectralAnalysis: Sendable {
@@ -51,8 +76,7 @@ enum SpectralAnalyzer {
         var real = [Float](repeating: 0, count: halfSpectrumCount)
         var imaginary = [Float](repeating: 0, count: halfSpectrumCount)
         var magnitudes = [Float](repeating: 0, count: halfSpectrumCount)
-        var previousLogMagnitude = [Float](repeating: 0, count: halfSpectrumCount)
-        var currentLogMagnitude = [Float](repeating: 0, count: halfSpectrumCount)
+        var previousMagnitudes = [Float](repeating: 0, count: halfSpectrumCount)
         var frames: [SpectralFrame] = []
         frames.reserveCapacity(frameCount)
 
@@ -69,14 +93,25 @@ enum SpectralAnalyzer {
         let bassCount = max(1, bassEnd - bassStart)
         let midCount = max(1, midEnd - bassEnd)
         let powerScale = 1 / Float(fftSize * fftSize)
+        let lowFluxEnd = min(
+            halfSpectrumCount,
+            max(bassStart + 1, Int(ceil(160 * Double(fftSize) / sampleRate)))
+        )
+        let midFluxEnd = min(
+            halfSpectrumCount,
+            max(lowFluxEnd + 1, Int(ceil(2_000 * Double(fftSize) / sampleRate)))
+        )
+        let highFluxStart = min(
+            halfSpectrumCount,
+            max(midFluxEnd, Int(ceil(4_000 * Double(fftSize) / sampleRate)))
+        )
 
         window.withUnsafeBufferPointer { windowPointer in
             interleaved.withUnsafeMutableBufferPointer { interleavedPointer in
                 real.withUnsafeMutableBufferPointer { realPointer in
                     imaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
                         magnitudes.withUnsafeMutableBufferPointer { magnitudePointer in
-                            previousLogMagnitude.withUnsafeMutableBufferPointer { previousPointer in
-                                currentLogMagnitude.withUnsafeMutableBufferPointer { currentPointer in
+                            previousMagnitudes.withUnsafeMutableBufferPointer { previousPointer in
                                     var splitComplex = DSPSplitComplex(
                                         realp: realPointer.baseAddress!,
                                         imagp: imaginaryPointer.baseAddress!
@@ -117,8 +152,10 @@ enum SpectralAnalyzer {
                                         )
 
                                         magnitudePointer[0] = 0
-                                        currentPointer[0] = 0
                                         var flux: Float = 0
+                                        var lowFlux: Float = 0
+                                        var midFlux: Float = 0
+                                        var highFlux: Float = 0
                                         var totalMagnitude: Float = 0
                                         var weightedMagnitude: Float = 0
                                         var bassEnergy: Float = 0
@@ -132,11 +169,26 @@ enum SpectralAnalyzer {
                                                 realValue * realValue + imaginaryValue * imaginaryValue
                                             )
                                             magnitudePointer[bin] = magnitude
-                                            let logMagnitude = log1pf(magnitude)
-                                            currentPointer[bin] = logMagnitude
-                                            let delta = logMagnitude - previousPointer[bin]
+                                            let lowerBin = max(1, bin - 2)
+                                            let upperBin = min(halfSpectrumCount - 1, bin + 2)
+                                            var maximumPreviousMagnitude: Float = 0
+                                            for previousBin in lowerBin...upperBin {
+                                                maximumPreviousMagnitude = max(
+                                                    maximumPreviousMagnitude,
+                                                    previousPointer[previousBin]
+                                                )
+                                            }
+                                            let delta = log1pf(magnitude)
+                                                - log1pf(maximumPreviousMagnitude)
                                             if delta > 0 {
                                                 flux += delta
+                                                if bin < lowFluxEnd {
+                                                    lowFlux += delta
+                                                } else if bin < midFluxEnd {
+                                                    midFlux += delta
+                                                } else if bin >= highFluxStart {
+                                                    highFlux += delta
+                                                }
                                             }
 
                                             let frequency = Float(bin) * Float(sampleRate) / Float(fftSize)
@@ -155,7 +207,7 @@ enum SpectralAnalyzer {
                                         }
 
                                         for bin in 0..<halfSpectrumCount {
-                                            previousPointer[bin] = currentPointer[bin]
+                                            previousPointer[bin] = magnitudePointer[bin]
                                         }
 
                                         frames.append(
@@ -167,7 +219,10 @@ enum SpectralAnalyzer {
                                                 centroid: totalMagnitude > 0
                                                     ? weightedMagnitude / totalMagnitude
                                                     : 0,
-                                                rms: sqrtf(rmsSum / Float(fftSize))
+                                                rms: sqrtf(rmsSum / Float(fftSize)),
+                                                lowFlux: lowFlux,
+                                                midFlux: midFlux,
+                                                highFlux: highFlux
                                             )
                                         )
                                         progress?(Double(frameIndex + 1) / Double(frameCount))
@@ -178,7 +233,6 @@ enum SpectralAnalyzer {
                     }
                 }
             }
-        }
 
         return SpectralAnalysis(frames: frames)
     }

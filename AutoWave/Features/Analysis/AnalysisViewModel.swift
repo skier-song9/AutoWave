@@ -15,6 +15,23 @@ final class AnalysisViewModel {
 
     private(set) var state: State = .idle
 
+    static func shouldRegenerate(storedGeneratorVersions: [Int]) -> Bool {
+        storedGeneratorVersions.contains { $0 < BeatmapGenerator.version }
+    }
+
+    static func needsRegeneration(for beatmaps: [BeatmapEntity]) -> Bool {
+        let versions = beatmaps.compactMap { entity -> Int? in
+            guard let beatmap = try? JSONDecoder().decode(
+                Beatmap.self,
+                from: entity.beatmapData
+            ) else {
+                return nil
+            }
+            return beatmap.generatorVersion
+        }
+        return shouldRegenerate(storedGeneratorVersions: versions)
+    }
+
     func start(track: TrackEntity, context: ModelContext) async {
         state = .analyzing(progress: 0)
 

@@ -5,11 +5,11 @@ import XCTest
 final class BeatmapGeneratorTests: XCTestCase {
     func testDifficultyProfilesMatchSpecification() {
         let expected: [(Difficulty, Int, Double, Double, Int, Double, Double, Double)] = [
-            (.heaven, 4, 1.2, 80, 1, 0.10, 0.0, 260),
-            (.easy, 4, 2.4, 60, 1, 0.15, 0.2, 330),
-            (.normal, 5, 4.0, 40, 2, 0.20, 0.4, 420),
-            (.hard, 6, 6.5, 20, 2, 0.25, 0.6, 520),
-            (.hell, 7, 9.5, 8, 3, 0.30, 0.8, 640)
+            (.heaven, 4, 1.2, 80, 1, 0.10, 0.0, 220),
+            (.easy, 4, 2.4, 60, 1, 0.15, 0.2, 280),
+            (.normal, 5, 4.0, 40, 2, 0.20, 0.4, 360),
+            (.hard, 6, 6.5, 20, 2, 0.25, 0.6, 440),
+            (.hell, 7, 9.5, 8, 3, 0.30, 0.8, 545)
         ]
 
         for (difficulty, laneCount, rate, percentile, simultaneous, drag, moving, scroll) in expected {
@@ -87,6 +87,12 @@ final class BeatmapGeneratorTests: XCTestCase {
                     let previousEnd = previous.time
                         + (previous.kind == .drag ? previous.duration + 0.15 : 0)
                     XCTAssertGreaterThanOrEqual(pair.1.time + 1e-9, previousEnd)
+
+                    let minimumGap = difficulty == .heaven || difficulty == .easy ? 0.25 : 0.12
+                    XCTAssertGreaterThanOrEqual(
+                        pair.1.time - previous.time,
+                        minimumGap - 1e-9
+                    )
                 }
             }
         }
@@ -204,8 +210,8 @@ final class BeatmapGeneratorTests: XCTestCase {
         XCTAssertFalse(beatmap.notes.contains { abs($0.time - 4.0) < 1e-9 })
     }
 
-    func testSequentialNotesHaveAtLeastTwentyMillisecondsAddedSpacing() {
-        let minimumGap: TimeInterval = 0.12
+    func testSequentialNotesHaveAtLeastNinetyMillisecondsAddedSpacing() {
+        let minimumGap: TimeInterval = 0.09
 
         for difficulty in Difficulty.allCases {
             let notes = BeatmapGenerator.generate(
@@ -222,6 +228,99 @@ final class BeatmapGeneratorTests: XCTestCase {
             for pair in zip(distinctTimes, distinctTimes.dropFirst()) {
                 XCTAssertGreaterThanOrEqual(pair.1 - pair.0, minimumGap - 1e-9)
             }
+        }
+    }
+
+    func testNearSilentTrackGetsBeatGridFallbackAtHalfNotePerSecond() {
+        let duration = 60.0
+        let analysis = AnalysisResult(
+            duration: duration,
+            tempo: 120,
+            onsets: [],
+            meanBass: 0.0001,
+            meanMid: 0.0001,
+            meanTreble: 0.0001,
+            meanRMS: 0.0001,
+            intensityCurve: Array(repeating: 0, count: Int(duration))
+        )
+
+        let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
+
+        XCTAssertGreaterThanOrEqual(Double(beatmap.notes.count) / duration, 0.5)
+        XCTAssertGreaterThanOrEqual(beatmap.notes.first?.time ?? 0, 3.0)
+    }
+
+    func testIntensityCurveIncreasesSecondHalfDensity() {
+        let onsets = stride(from: 3.0, through: 59.75, by: 0.25).map { time in
+            Onset(
+                time: time,
+                strength: 0.6,
+                bass: 0.2,
+                mid: 0.8,
+                treble: 0.1,
+                centroid: 900
+            )
+        }
+        let analysis = AnalysisResult(
+            duration: 60,
+            tempo: 120,
+            onsets: onsets,
+            meanBass: 0.2,
+            meanMid: 0.8,
+            meanTreble: 0.1,
+            meanRMS: 0.4,
+            intensityCurve: Array(repeating: 0.05, count: 30)
+                + Array(repeating: 0.95, count: 30)
+        )
+
+        let notes = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42).notes
+        let quietCount = notes.filter { $0.time < 31 }.count
+        let loudCount = notes.filter { $0.time >= 31 }.count
+
+        XCTAssertGreaterThan(loudCount, quietCount)
+    }
+
+    func testUniformClicksAvoidThreeJacksAndThreeRepeatingFourLaneCycles() {
+        let analysis = AnalysisResult(
+            duration: 30,
+            tempo: 120,
+            onsets: stride(from: 3.0, through: 29.75, by: 0.25).map { time in
+                Onset(
+                    time: time,
+                    strength: 1,
+                    bass: 0.2,
+                    mid: 0.8,
+                    treble: 0.1,
+                    centroid: 900
+                )
+            },
+            meanBass: 0.2,
+            meanMid: 0.8,
+            meanTreble: 0.1,
+            meanRMS: 0.4
+        )
+
+        let lanes = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
+            .notes
+            .sorted { $0.time == $1.time ? $0.lane < $1.lane : $0.time < $1.time }
+            .map { Int($0.lane.rounded()) }
+
+        for windowStart in 0..<(max(0, lanes.count - 2)) {
+            XCTAssertFalse(
+                lanes[windowStart] == lanes[windowStart + 1]
+                    && lanes[windowStart + 1] == lanes[windowStart + 2]
+            )
+        }
+
+        guard lanes.count >= 12 else {
+            XCTFail("Expected enough notes to inspect repeated patterns")
+            return
+        }
+        for start in 0...(lanes.count - 12) {
+            let first = Array(lanes[start..<(start + 4)])
+            let second = Array(lanes[(start + 4)..<(start + 8)])
+            let third = Array(lanes[(start + 8)..<(start + 12)])
+            XCTAssertFalse(first == second && second == third)
         }
     }
 
@@ -311,7 +410,7 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
 
         XCTAssertEqual(beatmap.themeID, "neonRush")
-        XCTAssertEqual(beatmap.generatorVersion, 6)
+        XCTAssertEqual(beatmap.generatorVersion, 5)
         XCTAssertEqual(beatmap.palette, beatmapThemePalette(for: GameTheme.presets[1]))
     }
 

@@ -1,9 +1,9 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 6
+    static let version = 5
     static let minimumPlayableNoteTime: TimeInterval = 3
-    private static let minimumSequentialGap: TimeInterval = 0.12
+    private static let minimumSequentialGap: TimeInterval = 0.09
     private static let dragSpanPadding: TimeInterval = 0.15
 
     static func generate(from analysis: AnalysisResult, difficulty: Difficulty, seed: UInt64) -> Beatmap {
@@ -14,22 +14,13 @@ enum BeatmapGenerator {
         let indexedOnsets = analysis.onsets.enumerated().map {
             IndexedOnset(index: $0.offset, onset: $0.element)
         }
-        let detectedOnsets = selectOnsets(indexedOnsets, profile: profile)
-        let selected = detectedOnsets.isEmpty
+        let detectedOnsets = selectOnsets(indexedOnsets, profile: profile, analysis: analysis)
+        let onsetRate = analysis.duration > 0
+            ? Double(detectedOnsets.count) / analysis.duration
+            : 0
+        let selected = detectedOnsets.isEmpty || (onsetRate < 0.5 && analysis.duration >= 30)
             ? fallbackBeatOnsets(for: analysis)
             : detectedOnsets
-        let dragSources = chooseDragSources(
-            from: selected,
-            ratio: profile.dragRatio,
-            beat: beat,
-            meanBass: analysis.meanBass,
-            rng: &rng
-        )
-        let movingSources = chooseMovingSources(
-            from: dragSources,
-            ratio: profile.movingDragRatio,
-            rng: &rng
-        )
         let patternEvents = enforceMinimumSequentialGap(
             cullByRate(
                 makePatternEvents(
@@ -43,12 +34,30 @@ enum BeatmapGenerator {
                 cap: Int(ceil(profile.maxNotesPerSecond))
             )
         )
+        let survivingSources = selected.filter { item in
+            patternEvents.contains { event in
+                event.isPrimary && event.source.index == item.index
+            }
+        }
+        let dragSources = chooseDragSources(
+            from: survivingSources,
+            ratio: profile.dragRatio,
+            beat: beat,
+            meanBass: analysis.meanBass,
+            rng: &rng
+        )
+        let movingSources = chooseMovingSources(
+            from: dragSources,
+            ratio: profile.movingDragRatio,
+            rng: &rng
+        )
         let centroidValues = analysis.onsets.map(\.centroid).sorted()
         let groups = makeGroups(patternEvents, maxSimultaneous: profile.maxSimultaneous)
 
         var candidates: [GeneratedNote] = []
         candidates.reserveCapacity(patternEvents.count)
         var previousLane: Int?
+        var laneHistory: [Int] = []
         for group in groups {
             var lanes: [Int] = []
             for event in group {
@@ -59,10 +68,15 @@ enum BeatmapGenerator {
                     difficulty: difficulty,
                     previousLane: previousLane,
                     occupiedLanes: lanes,
+                    recentLanes: laneHistory,
                     rng: &rng
                 )
                 lanes.append(lane)
                 previousLane = lane
+                laneHistory.append(lane)
+                if laneHistory.count > 8 {
+                    laneHistory.removeFirst()
+                }
 
                 let isDrag = event.isPrimary && dragSources.contains(event.source.index)
                 let duration: TimeInterval
@@ -106,7 +120,10 @@ enum BeatmapGenerator {
             maxSimultaneous: profile.maxSimultaneous,
             rng: &rng
         )
-        let notes = removeDragSpanConflicts(from: placedCandidates)
+        let notes = enforceSameLaneGap(
+            from: removeDragSpanConflicts(from: placedCandidates),
+            minimumGap: difficulty == .heaven || difficulty == .easy ? 0.25 : 0.12
+        )
             .filter { $0.time >= minimumPlayableNoteTime }
             .enumerated().map { index, candidate in
             Note(
@@ -149,6 +166,7 @@ enum BeatmapGenerator {
         var time: TimeInterval
         var isPrimary: Bool
         var isChord: Bool
+        var band: OnsetBand
 
         var priority: Float {
             source.onset.strength + (isChord ? 0.02 : 0)
@@ -165,22 +183,42 @@ enum BeatmapGenerator {
 
     private static func selectOnsets(
         _ onsets: [IndexedOnset],
-        profile: DifficultyProfile
+        profile: DifficultyProfile,
+        analysis: AnalysisResult
     ) -> [IndexedOnset] {
         let playableOnsets = onsets.filter {
             $0.onset.time >= minimumPlayableNoteTime
         }
         guard !playableOnsets.isEmpty else { return [] }
-        let strengths = playableOnsets.map { $0.onset.strength }.sorted()
-        let threshold = percentileValue(strengths, percentile: profile.strengthPercentile)
-        return playableOnsets
-            .filter { $0.onset.strength >= threshold }
-            .sorted {
-                if $0.onset.time == $1.onset.time {
-                    return $0.index < $1.index
+        let grouped = Dictionary(grouping: playableOnsets) {
+            Int($0.onset.time.rounded(.down))
+        }
+        return grouped.keys.sorted().flatMap { second in
+            let window = grouped[second] ?? []
+            let intensity = intensity(at: Double(second) + 0.5, curve: analysis.intensityCurve)
+            let percentile = profile.strengthPercentile + (1 - intensity) * 20
+            let threshold = percentileValue(
+                window.map { $0.onset.strength }.sorted(),
+                percentile: percentile
+            )
+            let densityScale = 0.35 + intensity * 0.65
+            let capacity = max(1, Int(ceil(profile.maxNotesPerSecond * densityScale)))
+            let ranked = window.sorted {
+                if $0.onset.strength == $1.onset.strength {
+                    return $0.onset.time < $1.onset.time
                 }
-                return $0.onset.time < $1.onset.time
+                return $0.onset.strength > $1.onset.strength
             }
+            let thresholdQualified = ranked.filter { $0.onset.strength >= threshold }
+            let budgetFill = ranked.filter { $0.onset.strength < threshold }
+            return Array((thresholdQualified + budgetFill).prefix(capacity))
+        }
+        .sorted {
+            if $0.onset.time == $1.onset.time {
+                return $0.index < $1.index
+            }
+            return $0.onset.time < $1.onset.time
+        }
     }
 
     private static func percentileValue(_ values: [Float], percentile: Double) -> Float {
@@ -213,7 +251,8 @@ enum BeatmapGenerator {
                     phase: beatPhase
                 ),
                 isPrimary: true,
-                isChord: false
+                isChord: false,
+                band: item.onset.band
             )
         }
 
@@ -222,6 +261,41 @@ enum BeatmapGenerator {
         }
 
         var nextIdentity = selected.map(\.index).max() ?? 0
+        let streamBeat = difficulty == .normal ? subdivision * 4 : subdivision * 8
+        let streamSubdivision: TimeInterval?
+        switch difficulty {
+        case .normal:
+            streamSubdivision = subdivision
+        case .hard, .hell:
+            streamSubdivision = subdivision
+        case .heaven, .easy:
+            streamSubdivision = nil
+        }
+
+        if let streamSubdivision {
+            let primaryEvents = events
+            for event in primaryEvents where event.band == .high {
+                var streamTime = event.time + streamSubdivision
+                let nextTime = selected.first {
+                    $0.onset.time > event.source.onset.time + 1e-9
+                }?.onset.time ?? duration
+                while streamTime < min(nextTime, event.time + streamBeat) {
+                    guard streamTime <= duration else { break }
+                    nextIdentity += 1
+                    events.append(
+                        PatternEvent(
+                            identity: nextIdentity,
+                            source: event.source,
+                            time: streamTime,
+                            isPrimary: false,
+                            isChord: false,
+                            band: .high
+                        )
+                    )
+                    streamTime += streamSubdivision
+                }
+            }
+        }
 
         if difficulty == .hell {
             let primaryEvents = events.filter(\.isPrimary)
@@ -234,7 +308,8 @@ enum BeatmapGenerator {
                         source: event.source,
                         time: event.time,
                         isPrimary: false,
-                        isChord: true
+                        isChord: true,
+                        band: .low
                     )
                 )
                 guard rng.nextDouble() < 0.35 else { continue }
@@ -245,7 +320,25 @@ enum BeatmapGenerator {
                         source: event.source,
                         time: event.time,
                         isPrimary: false,
-                        isChord: true
+                        isChord: true,
+                        band: .low
+                    )
+                )
+            }
+        } else if difficulty == .hard {
+            let primaryEvents = events.filter(\.isPrimary)
+            for event in primaryEvents
+                where event.band == .low && event.source.onset.strength >= 0.55 {
+                guard rng.nextDouble() < 0.3 else { continue }
+                nextIdentity += 1
+                events.append(
+                    PatternEvent(
+                        identity: nextIdentity,
+                        source: event.source,
+                        time: event.time,
+                        isPrimary: false,
+                        isChord: true,
+                        band: .low
                     )
                 )
             }
@@ -255,7 +348,7 @@ enum BeatmapGenerator {
     }
 
     private static func fallbackBeatOnsets(for analysis: AnalysisResult) -> [IndexedOnset] {
-        guard analysis.duration > minimumPlayableNoteTime, analysis.meanRMS > 0.01 else {
+        guard analysis.duration >= minimumPlayableNoteTime else {
             return []
         }
 
@@ -272,7 +365,7 @@ enum BeatmapGenerator {
                     index: index,
                     onset: Onset(
                         time: time,
-                        strength: 1,
+                        strength: max(0.05, Float(intensity(at: time, curve: analysis.intensityCurve))),
                         bass: analysis.meanBass,
                         mid: analysis.meanMid,
                         treble: analysis.meanTreble,
@@ -284,6 +377,12 @@ enum BeatmapGenerator {
             index -= 1
         }
         return result
+    }
+
+    private static func intensity(at time: TimeInterval, curve: [Float]) -> Double {
+        guard !curve.isEmpty else { return 1 }
+        let index = min(curve.count - 1, max(0, Int(time.rounded(.down))))
+        return Double(min(1, max(0, curve[index])))
     }
 
     private static func beatGridPhase(
@@ -546,33 +645,59 @@ enum BeatmapGenerator {
         difficulty: Difficulty,
         previousLane: Int?,
         occupiedLanes: [Int],
+        recentLanes: [Int],
         rng: inout SplitMix64
     ) -> Int {
         let centroidPercentile = percentileRank(of: onset.centroid, in: centroidValues)
-        let bandTotal = max(0.0001, onset.bass + onset.mid + onset.treble)
-        let trebleBalance = Double(onset.treble / bandTotal)
-        let musicalPosition = min(1, max(0, centroidPercentile * 0.75 + trebleBalance * 0.25))
-        let baseLane = min(laneCount - 1, max(0, Int(floor(musicalPosition * Double(laneCount)))))
-        var lane = baseLane
-
+        let region: ClosedRange<Int>
+        switch onset.band {
+        case .low:
+            region = 0...max(0, (laneCount - 1) / 2)
+        case .mid:
+            region = max(0, laneCount / 3)...min(laneCount - 1, (laneCount * 2) / 3)
+        case .high:
+            region = min(laneCount - 1, (laneCount * 2) / 3)...(laneCount - 1)
+        }
+        let regionWidth = region.upperBound - region.lowerBound + 1
+        let regionPosition = min(regionWidth - 1, max(0, Int(floor(centroidPercentile * Double(regionWidth)))))
+        let baseLane = region.lowerBound + regionPosition
         let variation = rng.nextDouble()
-        let variationDirection = rng.nextDouble() < 0.5 ? -1 : 1
+        let direction = rng.nextDouble() < 0.5 ? -1 : 1
+        var preferredLane = baseLane
         if previousLane == baseLane, variation < 0.6 {
-            lane = baseLane + variationDirection
+            preferredLane += direction
         } else if variation < 0.2 {
-            lane = baseLane + variationDirection
+            preferredLane += direction
         } else if (difficulty == .hard || difficulty == .hell), variation > 0.82 {
-            lane = baseLane + variationDirection * 2
+            preferredLane += direction * 2
         }
-        lane = min(laneCount - 1, max(0, lane))
+        preferredLane = min(region.upperBound, max(region.lowerBound, preferredLane))
 
-        if occupiedLanes.contains(lane) {
-            let alternatives = [1, -1, 2, -2].map { lane + $0 }
-            lane = alternatives.first(where: {
-                $0 >= 0 && $0 < laneCount && !occupiedLanes.contains($0)
-            }) ?? lane
+        let offsets = [0, 1, -1, 2, -2, 3, -3]
+        let orderedCandidates = offsets.map { preferredLane + $0 }
+            .filter { $0 >= region.lowerBound && $0 <= region.upperBound }
+        if let lane = orderedCandidates.first(where: {
+            !occupiedLanes.contains($0)
+                && !repeatsPattern(candidate: $0, history: recentLanes)
+        }) {
+            return lane
         }
-        return lane
+        if let lane = orderedCandidates.first(where: { !occupiedLanes.contains($0) }) {
+            return lane
+        }
+        return preferredLane
+    }
+
+    private static func repeatsPattern(candidate: Int, history: [Int]) -> Bool {
+        if history.count >= 2,
+           history[history.count - 1] == candidate,
+           history[history.count - 2] == candidate {
+            return true
+        }
+        guard history.count >= 8 else { return false }
+        let first = Array(history.suffix(8).prefix(4))
+        let second = Array(history.suffix(4))
+        return first == second && candidate == first[0]
     }
 
     private static func percentileRank(of value: Float, in sortedValues: [Float]) -> Double {
@@ -630,6 +755,23 @@ enum BeatmapGenerator {
             result.append(candidate)
             lastEndByLane[candidate.lane] = candidate.time
                 + (candidate.kind == .drag ? candidate.duration + 0.15 : 0)
+        }
+        return result
+    }
+
+    private static func enforceSameLaneGap(
+        from candidates: [GeneratedNote],
+        minimumGap: TimeInterval
+    ) -> [GeneratedNote] {
+        var lastTimeByLane: [Int: TimeInterval] = [:]
+        var result: [GeneratedNote] = []
+        for candidate in candidates.sorted(by: generatedNoteSort) {
+            if let lastTime = lastTimeByLane[candidate.lane],
+               candidate.time - lastTime < minimumGap - 1e-9 {
+                continue
+            }
+            result.append(candidate)
+            lastTimeByLane[candidate.lane] = candidate.time
         }
         return result
     }

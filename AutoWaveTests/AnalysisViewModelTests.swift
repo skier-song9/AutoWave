@@ -6,6 +6,40 @@ import XCTest
 
 @MainActor
 final class AnalysisViewModelTests: XCTestCase {
+    func testGeneratorVersionFourEntityRequiresAutomaticRegeneration() throws {
+        XCTAssertTrue(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [4]))
+        XCTAssertFalse(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [5, 5, 5, 5, 5]))
+
+        let track = TrackEntity(
+            title: "버전 테스트",
+            sourceFilename: "version.wav",
+            importedAt: Date(timeIntervalSince1970: 0),
+            relativeAudioPath: "AudioFiles/version.wav"
+        )
+        var staleBeatmap = BeatmapGenerator.generate(
+            from: AnalysisResult(
+                duration: 10,
+                tempo: 120,
+                onsets: [],
+                meanBass: 0.1,
+                meanMid: 0.1,
+                meanTreble: 0.1,
+                meanRMS: 0.1
+            ),
+            difficulty: .normal,
+            seed: 42
+        )
+        staleBeatmap.generatorVersion = 4
+        let data = try JSONEncoder().encode(staleBeatmap)
+        let entity = BeatmapEntity(
+            difficulty: Difficulty.normal.rawValue,
+            beatmapData: data,
+            track: track
+        )
+
+        XCTAssertTrue(AnalysisViewModel.needsRegeneration(for: [entity]))
+    }
+
     func testStartPersistsFiveStableBeatmapsAndReplacesExistingMaps() async throws {
         let relativePath = "AudioFiles/analysis-\(UUID().uuidString).wav"
         let audioURL = try makeAudioFixture(relativePath: relativePath)
