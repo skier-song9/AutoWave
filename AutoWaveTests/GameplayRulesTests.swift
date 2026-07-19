@@ -42,10 +42,13 @@ final class GameplayRulesTests: XCTestCase {
 
         XCTAssertEqual(projection.laneWidth(at: 1), 175, accuracy: 0.001)
         XCTAssertEqual(projection.laneCenterX(0, at: 1), 237.5, accuracy: 0.001)
+        XCTAssertEqual(projection.scale(at: 0), 0.22, accuracy: 0.001)
+        XCTAssertEqual(projection.scale(at: 1), 1, accuracy: 0.001)
+        XCTAssertEqual(projection.y(at: 0), projection.topY, accuracy: 0.001)
         XCTAssertEqual(projection.y(at: 1), projection.hitLineY, accuracy: 0.001)
     }
 
-    func testPerspectiveYMappingIsLinearAcrossEqualTimeDeltas() {
+    func testPerspectiveLaneWidthMatchesProjectedScale() {
         let projection = PerspectiveProjection(
             centerX: 500,
             topY: 500,
@@ -53,14 +56,33 @@ final class GameplayRulesTests: XCTestCase {
             bottomLaneWidth: 175,
             laneCount: 4
         )
-        let timesToHit: [TimeInterval] = [0, 0.2, 0.4, 0.6]
+
+        for progress in [CGFloat(0), 0.25, 0.5, 0.75, 1] {
+            XCTAssertEqual(
+                projection.laneWidth(at: progress),
+                projection.bottomLaneWidth * projection.scale(at: progress),
+                accuracy: 0.001
+            )
+        }
+    }
+
+    func testPerspectiveYMappingAcceleratesTowardHitLineAcrossEqualTimeDeltas() {
+        let projection = PerspectiveProjection(
+            centerX: 500,
+            topY: 500,
+            hitLineY: 100,
+            bottomLaneWidth: 175,
+            laneCount: 4
+        )
+        let timesToHit: [TimeInterval] = [2, 1.5, 1, 0.5, 0]
         let yPositions = timesToHit.map { timeToHit in
             projection.y(at: projection.progress(timeToHit: timeToHit, scrollSpeed: 200))
         }
+        let screenYDelta = zip(yPositions, yPositions.dropFirst()).map { $0.0 - $0.1 }
 
-        XCTAssertEqual(yPositions[1] - yPositions[0], 40, accuracy: 0.001)
-        XCTAssertEqual(yPositions[2] - yPositions[1], 40, accuracy: 0.001)
-        XCTAssertEqual(yPositions[3] - yPositions[2], 40, accuracy: 0.001)
+        XCTAssertTrue(screenYDelta[0] < screenYDelta[1])
+        XCTAssertTrue(screenYDelta[1] < screenYDelta[2])
+        XCTAssertTrue(screenYDelta[2] < screenYDelta[3])
     }
 
     func testLaneAreaUsesSeventyPercentOfSceneWidth() {

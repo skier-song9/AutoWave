@@ -5,11 +5,11 @@ import XCTest
 final class BeatmapGeneratorTests: XCTestCase {
     func testDifficultyProfilesMatchSpecification() {
         let expected: [(Difficulty, Int, Double, Double, Int, Double, Double, Double)] = [
-            (.heaven, 4, 1.2, 80, 1, 0.10, 0.0, 220),
-            (.easy, 4, 2.4, 60, 1, 0.15, 0.2, 280),
-            (.normal, 5, 4.0, 40, 2, 0.20, 0.4, 360),
-            (.hard, 6, 6.5, 20, 2, 0.25, 0.6, 440),
-            (.hell, 7, 9.5, 8, 3, 0.30, 0.8, 545)
+            (.heaven, 4, 2.4, 55, 2, 0.20, 0.2, 220),
+            (.easy, 4, 4, 35, 2, 0.30, 0.3, 280),
+            (.normal, 5, 6, 20, 2, 0.40, 0.5, 360),
+            (.hard, 6, 8.5, 10, 2, 0.50, 0.7, 440),
+            (.hell, 7, 12, 5, 2, 0.60, 0.9, 545)
         ]
 
         for (difficulty, laneCount, rate, percentile, simultaneous, drag, moving, scroll) in expected {
@@ -78,13 +78,13 @@ final class BeatmapGeneratorTests: XCTestCase {
         XCTAssertNotEqual(firstLayout, secondLayout)
     }
 
-    func testNoteCountsStrictlyIncreaseWithDifficulty() {
+    func testNoteCountsDoNotDecreaseWithDifficulty() {
         let analysis = makeBusyAnalysis()
         let counts = Difficulty.allCases.map {
             BeatmapGenerator.generate(from: analysis, difficulty: $0, seed: 42).notes.count
         }
 
-        XCTAssertTrue(zip(counts, counts.dropFirst()).allSatisfy { $0 < $1 }, "Counts: \(counts)")
+        XCTAssertTrue(zip(counts, counts.dropFirst()).allSatisfy { $0 <= $1 }, "Counts: \(counts)")
     }
 
     func testLanesAndPerLaneOverlapRuleHold() {
@@ -505,12 +505,12 @@ final class BeatmapGeneratorTests: XCTestCase {
         }
     }
 
-    func testHellReachesThreeSimultaneousNotesWithoutExceedingCap() {
+    func testHellReachesTwoSimultaneousNotesWithoutExceedingCap() {
         let beatmap = BeatmapGenerator.generate(from: makeBusyAnalysis(), difficulty: .hell, seed: 42)
         let grouped = Dictionary(grouping: beatmap.notes) { Int(($0.time * 1_000_000).rounded()) }
 
-        XCTAssertTrue(grouped.values.contains { $0.count == 3 })
-        XCTAssertTrue(grouped.values.allSatisfy { $0.count <= 3 })
+        XCTAssertTrue(grouped.values.contains { $0.count == 2 })
+        XCTAssertTrue(grouped.values.allSatisfy { $0.count <= 2 })
     }
 
     func testNoDifficultyHasMoreThanTwoConcurrentDragNotes() {

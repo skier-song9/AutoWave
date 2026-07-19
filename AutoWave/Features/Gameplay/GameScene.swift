@@ -84,6 +84,10 @@ final class GameScene: SKScene, @unchecked Sendable {
                 timeToHit: timeToHit,
                 scrollSpeed: scrollSpeed
             )
+            guard progress >= 0 else {
+                isHidden = true
+                return
+            }
             let point = projection.point(lane: note.lane, at: progress)
             let scale = projection.scale(at: progress)
 
@@ -332,6 +336,10 @@ final class GameScene: SKScene, @unchecked Sendable {
                 timeToHit: note.time - playbackTime,
                 scrollSpeed: scrollSpeed
             )
+            guard headProgress >= 0 else {
+                isHidden = true
+                return
+            }
             let headPoint = point(at: 0, playbackTime: playbackTime)
             let headScale = projection.scale(at: headProgress)
             position = .zero

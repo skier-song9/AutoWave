@@ -11,6 +11,9 @@ struct PerspectiveProjection: Equatable, Sendable {
     let laneCount: Int
     let topScale: CGFloat
 
+    private let projectionNear: CGFloat
+    private let projectionDepth: CGFloat
+
     init(
         centerX: CGFloat,
         topY: CGFloat,
@@ -25,6 +28,8 @@ struct PerspectiveProjection: Equatable, Sendable {
         self.bottomLaneWidth = bottomLaneWidth
         self.laneCount = laneCount
         self.topScale = topScale
+        projectionNear = topScale
+        projectionDepth = 1 - topScale
     }
 
     var travelHeight: CGFloat {
@@ -33,16 +38,17 @@ struct PerspectiveProjection: Equatable, Sendable {
 
     func progress(timeToHit: TimeInterval, scrollSpeed: CGFloat) -> CGFloat {
         guard travelHeight > 0 else { return 1 }
-        return 1 - CGFloat(timeToHit) * scrollSpeed / travelHeight
+        return 1 - CGFloat(timeToHit) * scrollSpeed * topScale / travelHeight
     }
 
     func y(at progress: CGFloat) -> CGFloat {
-        topY - travelHeight * progress
+        let projectedScale = scale(at: progress)
+        let normalizedScale = (projectedScale - topScale) / projectionDepth
+        return topY - travelHeight * normalizedScale
     }
 
     func laneWidth(at progress: CGFloat) -> CGFloat {
-        let clampedProgress = min(max(progress, 0), 1)
-        return bottomLaneWidth * (topScale + (1 - topScale) * clampedProgress)
+        bottomLaneWidth * scale(at: progress)
     }
 
     func laneCenterX(_ lane: Double, at progress: CGFloat) -> CGFloat {
@@ -55,7 +61,7 @@ struct PerspectiveProjection: Equatable, Sendable {
 
     func scale(at progress: CGFloat) -> CGFloat {
         let clampedProgress = min(max(progress, 0), 1)
-        return topScale + (1 - topScale) * clampedProgress
+        return projectionNear / (projectionNear + (1 - clampedProgress) * projectionDepth)
     }
 
     func point(lane: Double, at progress: CGFloat) -> CGPoint {

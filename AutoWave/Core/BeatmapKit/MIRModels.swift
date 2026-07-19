@@ -254,11 +254,11 @@ struct AnalyzerConfiguration: Codable, Sendable, Equatable {
         onsetConfidenceThreshold: 0.22,
         beatSnapTolerance: 0.06,
         subdivisionPolicy: [
-            DifficultyLayerPolicy(difficulty: .heaven, activeRoles: [.drum], minimumConfidence: 0.62, minimumSustainDuration: 0.5, npsCap: 1.2, subdivisionDenominator: 2, allowsTriplets: false),
-            DifficultyLayerPolicy(difficulty: .easy, activeRoles: [.drum, .melody], minimumConfidence: 0.52, minimumSustainDuration: 0.5, npsCap: 2.4, subdivisionDenominator: 2, allowsTriplets: false),
-            DifficultyLayerPolicy(difficulty: .normal, activeRoles: [.drum, .bass, .melody], minimumConfidence: 0.42, minimumSustainDuration: 0.25, npsCap: 4.0, subdivisionDenominator: 4, allowsTriplets: true),
-            DifficultyLayerPolicy(difficulty: .hard, activeRoles: [.drum, .bass, .melody, .vocal, .accompaniment], minimumConfidence: 0.32, minimumSustainDuration: 0.125, npsCap: 6.5, subdivisionDenominator: 8, allowsTriplets: true),
-            DifficultyLayerPolicy(difficulty: .hell, activeRoles: MusicalRole.allCases, minimumConfidence: 0.22, minimumSustainDuration: 0.125, npsCap: 9.5, subdivisionDenominator: 8, allowsTriplets: true)
+            DifficultyLayerPolicy(difficulty: .heaven, activeRoles: [.drum, .melody], minimumConfidence: 0.45, minimumSustainDuration: 0.25, npsCap: 2.4, subdivisionDenominator: 2, allowsTriplets: false),
+            DifficultyLayerPolicy(difficulty: .easy, activeRoles: [.drum, .bass, .melody], minimumConfidence: 0.35, minimumSustainDuration: 0.20, npsCap: 4, subdivisionDenominator: 4, allowsTriplets: false),
+            DifficultyLayerPolicy(difficulty: .normal, activeRoles: [.drum, .bass, .melody, .vocal], minimumConfidence: 0.28, minimumSustainDuration: 0.125, npsCap: 6, subdivisionDenominator: 4, allowsTriplets: true),
+            DifficultyLayerPolicy(difficulty: .hard, activeRoles: [.drum, .bass, .melody, .vocal, .accompaniment], minimumConfidence: 0.22, minimumSustainDuration: 0.125, npsCap: 8.5, subdivisionDenominator: 8, allowsTriplets: true),
+            DifficultyLayerPolicy(difficulty: .hell, activeRoles: MusicalRole.allCases, minimumConfidence: 0.16, minimumSustainDuration: 0.125, npsCap: 12, subdivisionDenominator: 8, allowsTriplets: true)
         ],
         sustainStabilityThreshold: 0.52,
         percussivenessRejectionThreshold: 0.76,

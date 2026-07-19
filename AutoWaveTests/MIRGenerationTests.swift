@@ -3,6 +3,25 @@ import XCTest
 @testable import AutoWave
 
 final class MIRGenerationTests: XCTestCase {
+    func testAnalyzerDefaultsMatchPlaygroundDifficultySettings() {
+        let expected: [(Difficulty, [MusicalRole], Float, TimeInterval, Double, Int)] = [
+            (.heaven, [.drum, .melody], 0.45, 0.25, 2.4, 2),
+            (.easy, [.drum, .bass, .melody], 0.35, 0.20, 4, 4),
+            (.normal, [.drum, .bass, .melody, .vocal], 0.28, 0.125, 6, 4),
+            (.hard, [.drum, .bass, .melody, .vocal, .accompaniment], 0.22, 0.125, 8.5, 8),
+            (.hell, MusicalRole.allCases, 0.16, 0.125, 12, 8)
+        ]
+
+        for (difficulty, roles, confidence, sustain, nps, subdivision) in expected {
+            let policy = AnalyzerConfiguration.default.policy(for: difficulty)
+            XCTAssertEqual(policy.activeRoles, roles)
+            XCTAssertEqual(policy.minimumConfidence, confidence)
+            XCTAssertEqual(policy.minimumSustainDuration, sustain)
+            XCTAssertEqual(policy.npsCap, nps)
+            XCTAssertEqual(policy.subdivisionDenominator, subdivision)
+        }
+    }
+
     func testBeatTrackerProducesBeatPositionsAndDownbeats() throws {
         let frames = (0..<32).map { index in
             SpectralFrame(
@@ -225,7 +244,7 @@ final class MIRGenerationTests: XCTestCase {
         let easy = MusicalEventAdapter.events(from: analysis, difficulty: .easy, configuration: .default)
         let hard = MusicalEventAdapter.events(from: analysis, difficulty: .hard, configuration: .default)
 
-        XCTAssertTrue(easy.allSatisfy { [.drum, .melody].contains($0.sourceRole) })
+        XCTAssertTrue(easy.allSatisfy { [.drum, .bass, .melody].contains($0.sourceRole) })
         XCTAssertGreaterThan(hard.count, easy.count)
         XCTAssertTrue(hard.contains { $0.sourceRole == .vocal })
         XCTAssertTrue(hard.contains { $0.sourceRole == .accompaniment })

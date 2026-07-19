@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AutoWave 노트 생성 실험장</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0d14;
+      --panel: #111722;
+      --panel-2: #171e2c;
+      --line: #283247;
+      --muted: #8994a8;
+      --text: #edf2ff;
+      --accent: #6ddcff;
+      --accent-2: #a98cff;
+      --danger: #ff7188;
+      --good: #63e6ae;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .28);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { border: 1px solid var(--line); border-radius: 8px; background: #1a2434; color: var(--text); cursor: pointer; padding: 8px 11px; }
+    button:hover { border-color: var(--accent); background: #202d42; }
+    button.primary { border-color: #4dbbd8; background: #16485a; }
+    button:disabled { cursor: wait; opacity: .55; }
+    input[type="number"], input[type="text"], select, textarea { border: 1px solid var(--line); border-radius: 6px; background: #0b111c; color: var(--text); }
+    input[type="number"], input[type="text"], select { min-width: 0; padding: 6px 7px; }
+    textarea { width: 100%; min-height: 110px; resize: vertical; padding: 8px; }
+    .app { min-height: 100vh; }
+    .topbar { align-items: center; border-bottom: 1px solid var(--line); display: flex; gap: 16px; justify-content: space-between; padding: 14px 18px; }
+    .brand { align-items: baseline; display: flex; gap: 12px; }
+    .brand h1 { font-size: 17px; letter-spacing: -.03em; margin: 0; }
+    .brand span, .hint, .status { color: var(--muted); }
+    .top-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+    .workspace { display: grid; gap: 14px; grid-template-columns: minmax(265px, 315px) minmax(0, 1fr); padding: 14px; }
+    .sidebar, .visual { min-width: 0; }
+    .sidebar { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 85px); overflow: auto; padding-right: 2px; }
+    .panel, .card { background: var(--panel); border: 1px solid var(--line); border-radius: 11px; box-shadow: var(--shadow); }
+    .panel { padding: 12px; }
+    .panel h2, .card h2 { font-size: 12px; letter-spacing: .05em; margin: 0 0 10px; text-transform: uppercase; }
+    .panel h2 { color: var(--accent); }
+    .control { display: grid; gap: 5px; margin: 9px 0; }
+    .control label { align-items: center; display: flex; justify-content: space-between; gap: 10px; }
+    .control label span:first-child { color: #d4dded; }
+    output { color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    input[type="range"] { accent-color: var(--accent); width: 100%; }
+    .two { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+    .three { display: grid; gap: 7px; grid-template-columns: repeat(3, 1fr); }
+    .file-drop { border: 1px dashed #42627c; border-radius: 8px; color: var(--muted); padding: 12px; text-align: center; }
+    .file-drop.over { background: #153040; border-color: var(--accent); color: var(--text); }
+    .file-drop input { display: none; }
+    .file-drop label { cursor: pointer; display: block; }
+    .file-name { color: var(--accent); display: block; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .visual { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .statusbar { align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; display: flex; gap: 12px; justify-content: space-between; padding: 8px 11px; }
+    .progress { background: #0b111c; border-radius: 99px; height: 6px; overflow: hidden; width: min(320px, 40vw); }
+    .progress > i { background: linear-gradient(90deg, var(--accent), var(--accent-2)); display: block; height: 100%; transition: width .12s; width: 0; }
+    .card { overflow: hidden; padding: 12px; }
+    .card-head { align-items: center; display: flex; gap: 10px; justify-content: space-between; margin-bottom: 8px; }
+    .card-head h2 { margin: 0; }
+    .canvas-wrap { background: #090d15; border: 1px solid #202a3c; border-radius: 7px; overflow: hidden; }
+    canvas { display: block; }
+    #overviewCanvas { height: 156px; width: 100%; }
+    .timeline-scroll { background: #090d15; border: 1px solid #202a3c; border-radius: 7px; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+    .timeline-inner { min-width: 100%; position: relative; width: 1200px; }
+    #noteCanvas { height: 300px; }
+    .playhead { background: #fff; box-shadow: 0 0 10px #fff; height: 100%; opacity: .8; pointer-events: none; position: absolute; top: 0; transform: translateX(-1px); width: 2px; z-index: 3; }
+    .legend { align-items: center; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }
+    .legend span { align-items: center; display: inline-flex; gap: 5px; }
+    .swatch { border-radius: 3px; display: inline-block; height: 9px; width: 9px; }
+    .lower-grid { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr) minmax(270px, 340px); }
+    #previewCanvas { height: 220px; width: 100%; }
+    #npsCanvas { height: 110px; width: 100%; }
+    .stats-table { border-collapse: collapse; font-variant-numeric: tabular-nums; width: 100%; }
+    .stats-table th, .stats-table td { border-bottom: 1px solid #202a3a; padding: 6px 4px; text-align: right; white-space: nowrap; }
+    .stats-table th:first-child, .stats-table td:first-child { text-align: left; }
+    .stats-table th { color: var(--muted); font-weight: 500; }
+    .stats-table tr.selected { background: #152838; }
+    .metric { color: var(--accent); font-size: 16px; font-variant-numeric: tabular-nums; }
+    .metric-grid { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin-bottom: 9px; }
+    .metric-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 7px; }
+    .metric-box small { color: var(--muted); display: block; }
+    .role-counts { color: var(--muted); font-size: 12px; margin-top: 8px; }
+    details summary { color: var(--accent); cursor: pointer; }
+    details p { color: var(--muted); margin: 8px 0 0; }
+    .empty { color: var(--muted); padding: 38px 12px; text-align: center; }
+    .error { color: var(--danger); }
+    .good { color: var(--good); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (max-width: 940px) {
+      .workspace { grid-template-columns: 1fr; }
+      .sidebar { max-height: none; order: 2; }
+      .visual { order: 1; }
+    }
+    @media (max-width: 640px) {
+      .topbar, .statusbar { align-items: flex-start; flex-direction: column; }
+      .top-actions { justify-content: flex-start; }
+      .lower-grid { grid-template-columns: 1fr; }
+      .progress { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>AutoWave 노트 생성 실험장</h1>
+        <span>BeatmapKit parity playground</span>
+      </div>
+      <div class="top-actions">
+        <button id="playButton" class="primary" disabled>▶ 재생</button>
+        <button id="stopButton" disabled>■ 정지</button>
+        <button id="synthButton">합성 신호 생성</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>오디오 입력</h2>
+          <div id="dropZone" class="file-drop">
+            <label for="audioInput">mp3 · m4a · wav 파일 선택<br>또는 여기에 드롭</label>
+            <input id="audioInput" type="file" accept="audio/mpeg,audio/mp4,audio/wav,audio/x-wav,.mp3,.m4a,.wav">
+            <span id="fileName" class="file-name">입력 대기</span>
+          </div>
+          <p class="hint">Web Audio decode → 22050Hz mono. FFT 결과는 캐시하고 아래 설정은 재생성에 즉시 반영.</p>
+        </section>
+
+        <section class="panel">
+          <h2>온셋 / 분석</h2>
+          <div class="control"><label><span>온셋 임계 <code>onsetConfidenceThreshold</code></span><output id="onsetConfidenceThresholdOut"></output></label><input id="onsetConfidenceThreshold" data-kind="analysis" type="range" min="0.05" max="0.8" step="0.01"></div>
+          <div class="control"><label><span>Low 민감도</span><output id="bandLowThresholdOut"></output></label><input id="bandLowThreshold" data-kind="analysis" type="range" min="0.5" max="2.5" step="0.01"></div>
+          <div class="control"><label><span>Mid 민감도</span><output id="bandMidThresholdOut"></output></label><input id="bandMidThreshold" data-kind="analysis" type="range" min="0.5" max="2.5" step="0.01"></div>
+          <div class="control"><label><span>High 민감도</span><output id="bandHighThresholdOut"></output></label><input id="bandHighThreshold" data-kind="analysis" type="range" min="0.5" max="2.5" step="0.01"></div>
+          <div class="two">
+            <div class="control"><label><span>최소 간격 (초)</span><output id="minimumGapOut"></output></label><input id="minimumGap" data-kind="analysis" type="range" min="0.03" max="0.3" step="0.005"></div>
+            <div class="control"><label><span>병합 윈도우</span><output id="mergeWindowOut"></output></label><input id="mergeWindow" data-kind="analysis" type="range" min="0.005" max="0.1" step="0.005"></div>
+          </div>
+          <div class="control"><label><span>섹션 감도 <code>sectionBoundarySensitivity</code></span><output id="sectionBoundarySensitivityOut"></output></label><input id="sectionBoundarySensitivity" data-kind="analysis" type="range" min="0.05" max="0.8" step="0.01"></div>
+        </section>
+
+        <section class="panel">
+          <h2>노트 생성</h2>
+          <div class="control"><label for="difficulty"><span>난이도</span></label><select id="difficulty" data-kind="generation"><option value="heaven">천국 · 4레인</option><option value="easy">쉬움 · 4레인</option><option value="normal">보통 · 5레인</option><option value="hard">어려움 · 6레인</option><option value="hell">지옥 · 7레인</option></select></div>
+          <div class="two">
+            <div class="control"><label><span>NPS 캡 (0=기본)</span><output id="maxNotesPerSecondOut"></output></label><input id="maxNotesPerSecond" data-kind="generation" type="range" min="0" max="12" step="0.1"></div>
+            <div class="control"><label><span>strengthPercentile</span><output id="strengthPercentileOut"></output></label><input id="strengthPercentile" data-kind="generation" type="range" min="-1" max="100" step="1"></div>
+          </div>
+            <div class="control"><label><span>동시 노트 캡 (고정)</span><output id="maxSimultaneousOut"></output></label><input id="maxSimultaneous" data-kind="generation" type="range" min="2" max="2" step="1" disabled></div>
+          <div class="control"><label><span>dragRatio</span><output id="dragRatioOut"></output></label><input id="dragRatio" data-kind="generation" type="range" min="0" max="0.7" step="0.01"></div>
+          <div class="two">
+            <div class="control"><label><span>지속음 최소 길이</span><output id="minimumSustainDurationOut"></output></label><input id="minimumSustainDuration" data-kind="generation analysis" type="range" min="0.1" max="2" step="0.025"></div>
+            <div class="control"><label><span>sustainStability</span><output id="sustainStabilityThresholdOut"></output></label><input id="sustainStabilityThreshold" data-kind="analysis generation" type="range" min="0" max="1" step="0.01"></div>
+          </div>
+          <div class="two">
+            <div class="control"><label><span>드래그 최소 길이</span><output id="dragMinDurationOut"></output></label><input id="dragMinDuration" data-kind="generation" type="range" min="0.125" max="2" step="0.025"></div>
+            <div class="control"><label><span>드래그 최대 길이</span><output id="dragMaxDurationOut"></output></label><input id="dragMaxDuration" data-kind="generation" type="range" min="0.5" max="8" step="0.25"></div>
+          </div>
+          <div class="control"><label><span>안티 반복 강도</span><output id="antiRepeatStrengthOut"></output></label><input id="antiRepeatStrength" data-kind="generation" type="range" min="0" max="1" step="0.05"></div>
+          <div class="control"><label for="seed"><span>시드 <code>seed</code></span></label><input id="seed" data-kind="generation" class="mono" type="text" inputmode="numeric"></div>
+        </section>
+
+        <section class="panel">
+          <h2>레인 매핑 가중치</h2>
+          <p class="hint">-1은 왼쪽, +1은 오른쪽 성향. Swift의 역할 분류는 유지하고 playground 레인 편향만 추가.</p>
+          <div class="control"><label><span>drum</span><output id="laneDrumOut"></output></label><input id="laneDrum" data-kind="generation" type="range" min="-1" max="1" step="0.05"></div>
+          <div class="control"><label><span>bass</span><output id="laneBassOut"></output></label><input id="laneBass" data-kind="generation" type="range" min="-1" max="1" step="0.05"></div>
+          <div class="control"><label><span>melody</span><output id="laneMelodyOut"></output></label><input id="laneMelody" data-kind="generation" type="range" min="-1" max="1" step="0.05"></div>
+          <div class="control"><label><span>vocal</span><output id="laneVocalOut"></output></label><input id="laneVocal" data-kind="generation" type="range" min="-1" max="1" step="0.05"></div>
+          <div class="control"><label><span>accompaniment</span><output id="laneAccompanimentOut"></output></label><input id="laneAccompaniment" data-kind="generation" type="range" min="-1" max="1" step="0.05"></div>
+        </section>
+
+        <section class="panel">
+          <h2>설정 JSON</h2>
+          <div class="two"><button id="exportButton">JSON 복사</button><button id="importButton">JSON 적용</button></div>
+          <textarea id="settingsJson" spellcheck="false" aria-label="설정 JSON"></textarea>
+        </section>
+
+        <section class="panel">
+          <details>
+            <summary>Swift 패리티 / 의도적 차이</summary>
+            <p><code>AutoWave/Core/BeatmapKit/</code>의 SpectralAnalyzer, OnsetDetector, MIRAnalyzers, MIRModels, MusicalEventAdapter, BeatmapGenerator, DifficultyProfile, AnalysisResult 구조와 이름을 맞췄다.</p>
+            <p>브라우저는 Web Audio의 다운믹스·리샘플링과 인라인 radix-2 FFT를 사용하므로 vDSP의 부동소수점 결과와 수치가 완전히 같지는 않다. onset threshold는 Swift의 0.05 floor를 기본으로 두고 <code>onsetConfidenceThreshold</code>로 floor를 조정한다.</p>
+            <p>온디바이스 ML stem 분리 대신 DSP fallback을 쓴다. vocal은 150–1200Hz contour heuristic, accompaniment는 Swift의 mid-energy 조건이다. dragRatio, lane mapping, anti-repeat은 실험용 override이며 Swift 이식 시 같은 키를 그대로 옮길 수 있다.</p>
+          </details>
+        </section>
+      </aside>
+
+      <section class="visual">
+        <div class="statusbar">
+          <span id="status" class="status">오디오를 넣거나 합성 신호를 생성하세요.</span>
+          <div class="progress"><i id="progressFill"></i></div>
+        </div>
+
+        <section class="card">
+          <div class="card-head"><h2>파형 · 온셋 · 비트그리드 · 섹션</h2><span id="analysisMeta" class="hint">-</span></div>
+          <div class="canvas-wrap"><canvas id="overviewCanvas" width="1200" height="156"></canvas></div>
+          <div class="legend">
+            <span><i class="swatch" style="background:#63b7ff"></i>Low onset</span><span><i class="swatch" style="background:#c68cff"></i>Mid onset</span><span><i class="swatch" style="background:#f4d35e"></i>High onset</span><span><i class="swatch" style="background:#fff"></i>다운비트</span><span><i class="swatch" style="background:#526078"></i>비트</span><span><i class="swatch" style="background:#63e6ae"></i>섹션</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2>노트맵 · <span id="timelineMeta">-</span></h2><span class="hint">가로 스크롤 · 플레이헤드 동기화</span></div>
+          <div id="timelineScroll" class="timeline-scroll"><div id="timelineInner" class="timeline-inner"><canvas id="noteCanvas" width="1200" height="300"></canvas><div id="timelinePlayhead" class="playhead" style="left:0"></div></div></div>
+          <div class="legend"><span><i class="swatch" style="background:#ff6b6b"></i>kick</span><span><i class="swatch" style="background:#ffad66"></i>snare</span><span><i class="swatch" style="background:#f5e663"></i>hat</span><span><i class="swatch" style="background:#4f9cff"></i>bass</span><span><i class="swatch" style="background:#bd7cff"></i>melody</span><span><i class="swatch" style="background:#ff67bf"></i>vocal-sustain</span><span><i class="swatch" style="background:#70e0b3"></i>accompaniment</span></div>
+        </section>
+
+        <div class="lower-grid">
+          <section class="card">
+            <div class="card-head"><h2>통계 · 선택 난이도</h2><span id="selectedStatMeta" class="hint">-</span></div>
+            <div id="metricGrid" class="metric-grid"></div>
+            <div class="canvas-wrap"><canvas id="npsCanvas" width="800" height="110"></canvas></div>
+            <div id="roleCounts" class="role-counts">-</div>
+            <table class="stats-table"><thead><tr><th>난이도</th><th>레인</th><th>노트</th><th>NPS</th><th>탭/드래그</th><th>드래그 평균</th></tr></thead><tbody id="statsBody"></tbody></table>
+          </section>
+          <section class="card">
+            <div class="card-head"><h2>실시간 프리뷰</h2><span id="previewMeta" class="hint">-</span></div>
+            <div class="canvas-wrap"><canvas id="previewCanvas" width="680" height="440"></canvas></div>
+            <p class="hint">재생 중 현재 시점 앞 3초 노트가 아래로 떨어집니다. 레인 수는 선택 난이도에 맞춰집니다.</p>
+          </section>
+        </div>
+
+        <section class="card">
+          <details open>
+            <summary>실험 메모</summary>
+            <p id="smokeStatus">합성 신호 생성 버튼은 120 BPM kick + eighth hat + sustain melody를 만들고 decode 없이 같은 분석·생성 경로를 실행합니다.</p>
+          </details>
+        </section>
+      </section>
+    </main>
+  </div>
+  <audio id="audio" preload="auto"></audio>
+
+  <script>
+    "use strict";
+
+    const PROFILES = {
+      heaven: { displayName: "천국", laneCount: 4, maxNotesPerSecond: 2.4, strengthPercentile: 55, maxSimultaneous: 2, dragRatio: .20, movingDragRatio: .2, scrollSpeed: 220, activeRoles: ["drum", "melody"], minimumConfidence: .45, minimumSustainDuration: .25, subdivisionDenominator: 2 },
+      easy: { displayName: "쉬움", laneCount: 4, maxNotesPerSecond: 4, strengthPercentile: 35, maxSimultaneous: 2, dragRatio: .30, movingDragRatio: .3, scrollSpeed: 280, activeRoles: ["drum", "bass", "melody"], minimumConfidence: .35, minimumSustainDuration: .20, subdivisionDenominator: 4 },
+      normal: { displayName: "보통", laneCount: 5, maxNotesPerSecond: 6, strengthPercentile: 20, maxSimultaneous: 2, dragRatio: .40, movingDragRatio: .5, scrollSpeed: 360, activeRoles: ["drum", "bass", "melody", "vocal"], minimumConfidence: .28, minimumSustainDuration: .125, subdivisionDenominator: 4 },
+      hard: { displayName: "어려움", laneCount: 6, maxNotesPerSecond: 8.5, strengthPercentile: 10, maxSimultaneous: 2, dragRatio: .50, movingDragRatio: .7, scrollSpeed: 440, activeRoles: ["drum", "bass", "melody", "vocal", "accompaniment"], minimumConfidence: .22, minimumSustainDuration: .125, subdivisionDenominator: 8 },
+      hell: { displayName: "지옥", laneCount: 7, maxNotesPerSecond: 12, strengthPercentile: 5, maxSimultaneous: 2, dragRatio: .60, movingDragRatio: .9, scrollSpeed: 545, activeRoles: ["drum", "bass", "melody", "vocal", "accompaniment"], minimumConfidence: .16, minimumSustainDuration: .125, subdivisionDenominator: 8 }
+    };
+    const ROLE_LABELS = { drum: "drum", bass: "bass", melody: "melody", vocal: "vocal", accompaniment: "accompaniment" };
+    const ROLE_COLORS = { kick: "#ff6b6b", snare: "#ffad66", hihatLike: "#f5e663", drum: "#ff8c8c", bass: "#4f9cff", melody: "#bd7cff", vocal: "#ff67bf", accompaniment: "#70e0b3" };
+    const DEFAULT_SETTINGS = {
+      sampleRate: 22050, fftSize: 1024, hopSize: 512, medianWindowSize: 11, medianMultiplier: 1.15, globalMedianMultiplier: 2,
+      minimumGap: .09, mergeWindow: .025, onsetConfidenceThreshold: .22, beatSnapTolerance: .06,
+      bandThresholds: { low: 1, mid: 1, high: 1 }, sustainStabilityThreshold: .52, percussivenessRejectionThreshold: .76,
+      layerImportanceWeights: { drum: 1, bass: .9, melody: 1.1, vocal: 1.2, accompaniment: .72 }, dragCandidateClutterPenalty: .2,
+      contourSmoothingWindow: 3, sectionBoundarySensitivity: .28, dragRatio: .40, minimumSustainDuration: .125,
+      dragMinDuration: .125, dragMaxDuration: 4, antiRepeatStrength: 1, maxNotesPerSecond: 0, strengthPercentile: -1,
+      maxSimultaneous: 2, laneMappingWeights: { drum: 0, bass: -.25, melody: .2, vocal: .15, accompaniment: .05 }, seed: "123456789"
+    };
+    const minimumSequentialGap = .09, dragSpanPadding = .15, minimumLaneStepInterval = .35;
+    const state = { settings: structuredClone(DEFAULT_SETTINGS), analysis: null, beatmaps: {}, objectURL: null, worker: null, waveform: [], playing: false, raf: 0, lastProgress: 0, smokePending: false };
+    const $ = id => document.getElementById(id);
+
+    /* Worker mirrors the pure Swift pipeline. It retains spectral frames so parameter changes skip FFT. */
+    const workerSource = String.raw`
+      "use strict";
+      let cachedFrames = [];
+      const TWO_PI = Math.PI * 2;
+      function clamp(value, low, high) { return Math.max(low, Math.min(high, value)); }
+      function maxOf(values) { let result = -Infinity; for (const value of values) result = Math.max(result, value); return result; }
+      function minOf(values) { let result = Infinity; for (const value of values) result = Math.min(result, value); return result; }
+      function frameTime(index, settings) { return index * settings.hopSize / settings.sampleRate; }
+      function frameDuration(settings) { return settings.hopSize / settings.sampleRate; }
+      function hann(index, size) { return 0.5 * (1 - Math.cos(TWO_PI * index / (size - 1))); }
+      function fft(real, imaginary) {
+        const n = real.length;
+        for (let i = 1, j = 0; i < n; i++) {
+          let bit = n >> 1;
+          for (; j & bit; bit >>= 1) j ^= bit;
+          j ^= bit;
+          if (i < j) { const r = real[i]; real[i] = real[j]; real[j] = r; const im = imaginary[i]; imaginary[i] = imaginary[j]; imaginary[j] = im; }
+        }
+        for (let length = 2; length <= n; length <<= 1) {
+          const angle = -TWO_PI / length;
+          const wr = Math.cos(angle), wi = Math.sin(angle), half = length >> 1;
+          for (let start = 0; start < n; start += length) {
+            let ur = 1, ui = 0;
+            for (let offset = 0; offset < half; offset++) {
+              const even = start + offset, odd = even + half;
+              const tr = ur * real[odd] - ui * imaginary[odd];
+              const ti = ur * imaginary[odd] + ui * real[odd];
+              real[odd] = real[even] - tr; imaginary[odd] = imaginary[even] - ti;
+              real[even] += tr; imaginary[even] += ti;
+              const next = ur * wr - ui * wi; ui = ur * wi + ui * wr; ur = next;
+            }
+          }
+        }
+      }
+      function spectralAnalyze(samples, settings) {
+        const size = settings.fftSize, hop = settings.hopSize, half = size >> 1;
+        const count = Math.ceil(samples.length / hop), previous = new Float64Array(half), result = [];
+        const bassEnd = Math.min(half, Math.max(2, Math.ceil(250 * size / settings.sampleRate)));
+        const midEnd = Math.min(half, Math.max(bassEnd + 1, Math.ceil(2000 * size / settings.sampleRate)));
+        const lowFluxEnd = Math.min(half, Math.max(2, Math.ceil(160 * size / settings.sampleRate)));
+        const midFluxEnd = Math.min(half, Math.max(lowFluxEnd + 1, Math.ceil(2000 * size / settings.sampleRate)));
+        const highFluxStart = Math.min(half, Math.max(midFluxEnd, Math.ceil(4000 * size / settings.sampleRate)));
+        const bassCount = Math.max(1, bassEnd - 1), midCount = Math.max(1, midEnd - bassEnd), trebleCount = Math.max(1, half - midEnd);
+        for (let frameIndex = 0; frameIndex < count; frameIndex++) {
+          const real = new Float64Array(size), imaginary = new Float64Array(size), start = frameIndex * hop - hop;
+          let rmsSum = 0;
+          for (let i = 0; i < size; i++) { const sourceIndex = start + i; const sample = sourceIndex >= 0 && sourceIndex < samples.length ? samples[sourceIndex] : 0; rmsSum += sample * sample; real[i] = sample * hann(i, size); }
+          fft(real, imaginary);
+          let flux = 0, lowFlux = 0, midFlux = 0, highFlux = 0, totalMagnitude = 0, weightedMagnitude = 0, logMagnitudeSum = 0;
+          let dominantBin = 0, dominantMagnitude = 0, bassEnergy = 0, midEnergy = 0, trebleEnergy = 0;
+          const magnitudes = new Float64Array(half);
+          for (let bin = 1; bin < half; bin++) {
+            const magnitude = Math.sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin]); magnitudes[bin] = magnitude;
+            if (magnitude > dominantMagnitude) { dominantMagnitude = magnitude; dominantBin = bin; }
+            logMagnitudeSum += Math.log(Math.max(magnitude, .000001));
+            let previousMaximum = 0; for (let p = Math.max(1, bin - 2); p <= Math.min(half - 1, bin + 2); p++) previousMaximum = Math.max(previousMaximum, previous[p]);
+            const delta = Math.log1p(magnitude) - Math.log1p(previousMaximum);
+            if (delta > 0) { flux += delta; if (bin < lowFluxEnd) lowFlux += delta; else if (bin < midFluxEnd) midFlux += delta; else if (bin >= highFluxStart) highFlux += delta; }
+            const frequency = bin * settings.sampleRate / size; totalMagnitude += magnitude; weightedMagnitude += magnitude * frequency;
+            const energy = (real[bin] * real[bin] + imaginary[bin] * imaginary[bin]) / (size * size);
+            if (bin < bassEnd) bassEnergy += energy; else if (bin < midEnd) midEnergy += energy; else trebleEnergy += energy;
+          }
+          for (let bin = 0; bin < half; bin++) previous[bin] = magnitudes[bin];
+          const flatness = totalMagnitude > 0 ? clamp(Math.exp(logMagnitudeSum / Math.max(1, half - 1)) / Math.max(.000001, totalMagnitude / Math.max(1, half - 1)), 0, 1) : 1;
+          result.push({ flux, bass: bassEnergy / bassCount, mid: midEnergy / midCount, treble: trebleEnergy / trebleCount, centroid: totalMagnitude > 0 ? weightedMagnitude / totalMagnitude : 0, rms: Math.sqrt(rmsSum / size), lowFlux, midFlux, highFlux, dominantFrequency: dominantBin * settings.sampleRate / size, pitchConfidence: 1 - flatness, spectralFlatness: flatness });
+          if ((frameIndex & 31) === 0) self.postMessage({ type: "progress", value: frameIndex / Math.max(1, count) * .72 });
+        }
+        return result;
+      }
+      function sortedMedian(values) { const copy = values.slice().sort((a, b) => a - b); return copy[Math.floor(copy.length / 2)] || 0; }
+      function fluxFor(frame, band) {
+        const total = Math.max(.0001, frame.bass + frame.mid + frame.treble), share = band === "low" ? frame.bass / total : band === "mid" ? frame.mid / total : frame.treble / total;
+        if (share < .05) return 0; const value = band === "low" ? frame.lowFlux : band === "mid" ? frame.midFlux : frame.highFlux; return value * share * share;
+      }
+      function detectOnsets(frames, settings, tempo, duration) {
+        const peaks = [];
+        ["low", "mid", "high"].forEach(band => {
+          const values = frames.map(frame => fluxFor(frame, band)), halfWindow = Math.floor(settings.medianWindowSize / 2), maximum = Math.max(maxOf(values), 0);
+          if (!(maximum > 0)) return;
+          const globalFloor = sortedMedian(values) * settings.globalMedianMultiplier, gapFrames = Math.max(1, Math.ceil(settings.minimumGap * settings.sampleRate / settings.hopSize)), selected = [];
+          for (let index = 0; index < values.length; index++) {
+            const local = []; for (let offset = -halfWindow; offset <= halfWindow; offset++) local.push(values[Math.max(0, Math.min(values.length - 1, index + offset))]);
+            const localMedian = sortedMedian(local), sensitivityFloor = maximum * Math.max(.05, settings.onsetConfidenceThreshold * .25), threshold = Math.max(localMedian * settings.medianMultiplier, globalFloor, sensitivityFloor) * (settings.bandThresholds[band] || 1), value = values[index];
+            const previous = index > 0 ? values[index - 1] : -Infinity, next = index + 1 < values.length ? values[index + 1] : -Infinity;
+            if (!(value > threshold && value >= previous && value >= next && (value > previous || value > next))) continue;
+            const last = selected[selected.length - 1]; if (last !== undefined && index - last < gapFrames) { if (value > values[last]) selected[selected.length - 1] = index; } else selected.push(index);
+          }
+          selected.forEach(index => peaks.push({ index, value: values[index] / maximum, band }));
+        });
+        peaks.sort((a, b) => a.index - b.index || b.value - a.value);
+        const groups = [];
+        peaks.forEach(peak => { const last = groups[groups.length - 1], lastPeak = last && last.reduce((best, item) => item.value > best.value ? item : best, last[0]); if (last && (peak.index - lastPeak.index) * settings.hopSize / settings.sampleRate <= settings.mergeWindow) last.push(peak); else groups.push([peak]); });
+        const maximumStrength = Math.max(maxOf(groups.map(group => maxOf(group.map(item => item.value)))), 1);
+        let onsets = groups.map(group => { const peak = group.reduce((best, item) => item.value > best.value ? item : best, group[0]), frame = frames[peak.index]; return { time: (peak.index + 1) * settings.hopSize / settings.sampleRate, strength: peak.value / maximumStrength, bass: frame.bass, mid: frame.mid, treble: frame.treble, centroid: frame.centroid, band: peak.band }; });
+        const averageRMS = frames.reduce((sum, frame) => sum + frame.rms, 0) / Math.max(1, frames.length), onsetRate = duration > 0 ? onsets.length / duration : 0;
+        if (onsetRate < .5 && averageRMS < .01 && duration >= 4) { const beat = 60 / (tempo > 0 ? tempo : 120); onsets = []; for (let time = 0; time <= duration + 1e-9; time += beat) { const index = Math.min(frames.length - 1, Math.max(0, Math.round(time * settings.sampleRate / settings.hopSize))), frame = frames[index]; onsets.push({ time, strength: frame.rms, bass: frame.bass, mid: frame.mid, treble: frame.treble, centroid: frame.centroid, band: dominantBand(frame.bass, frame.mid, frame.treble) }); } }
+        return onsets;
+      }
+      function dominantBand(bass, mid, treble) { return bass >= mid && bass >= treble ? "low" : mid >= treble ? "mid" : "high"; }
+      function tempoEstimate(frames, settings) {
+        if (frames.length <= 1) return 0; const minLag = Math.max(1, Math.floor(60 * settings.sampleRate / (settings.hopSize * 200))), maxLag = Math.min(frames.length - 1, Math.ceil(60 * settings.sampleRate / (settings.hopSize * 60))); let bestLag = 0, bestCorrelation = 0; const correlations = [];
+        for (let lag = minLag; lag <= maxLag; lag++) { let correlation = 0; const count = frames.length - lag; for (let i = 0; i < count; i++) correlation += frames[i].flux * frames[i + lag].flux; correlation /= Math.max(1, count); correlations[lag] = correlation; if (correlation > bestCorrelation) { bestCorrelation = correlation; bestLag = lag; } }
+        if (!(bestLag > 0 && bestCorrelation > 0)) return 0; const halfLag = Math.round(bestLag / 2); if (halfLag >= minLag && correlations[halfLag] >= bestCorrelation * .5) bestLag = halfLag; let bpm = 60 * settings.sampleRate / (settings.hopSize * bestLag); while (bpm < 60) bpm *= 2; while (bpm > 200) bpm /= 2; return bpm;
+      }
+      function bestPhase(onsets, beatDuration, subdivision) { if (!onsets.length || subdivision <= 0) return 0; let best = 0, bestScore = -Infinity; for (let step = 0; step < 32; step++) { const phase = subdivision * step / 32; const score = onsets.reduce((total, onset) => { const nearest = phase + Math.round((onset.time - phase) / subdivision) * subdivision; return total + onset.strength * Math.max(0, 1 - Math.abs(onset.time - nearest) / (subdivision * .5)); }, 0); if (score > bestScore) { bestScore = score; best = phase; } } return best; }
+      function nearestBeat(time, beats, tolerance) { if (!beats.length) return null; let nearest = beats[0]; for (const beat of beats) if (Math.abs(beat.time - time) < Math.abs(nearest.time - time)) nearest = beat; return Math.abs(nearest.time - time) <= tolerance ? nearest.time : null; }
+      function sectionID(time, sections) { const item = sections.find(section => time >= section.startTime && time < section.endTime); return item ? item.id : null; }
+      function smoothContour(points, window) { if (points.length <= 2 || window <= 1) return points; const radius = Math.max(1, Math.floor(window / 2)); return points.map((point, index) => { const lower = Math.max(0, index - radius), upper = Math.min(points.length - 1, index + radius), values = points.slice(lower, upper + 1); return { time: point.time, value: values.reduce((sum, value) => sum + value.value, 0) / values.length, confidence: values.reduce((sum, value) => sum + value.confidence, 0) / values.length }; }); }
+      function contourAnalysis(frames, settings, role, minimum, maximum) {
+        const selected = frames.map((frame, index) => ({ frame, index })).filter(item => item.frame.dominantFrequency >= minimum && item.frame.dominantFrequency <= maximum && item.frame.pitchConfidence >= settings.onsetConfidenceThreshold);
+        if (!selected.length) return { contour: [], objects: [] };
+        const contour = smoothContour(selected.map(item => ({ time: frameTime(item.index, settings), value: item.frame.dominantFrequency, confidence: item.frame.pitchConfidence })), settings.contourSmoothingWindow), objects = []; let start = 0;
+        for (let index = 1; index <= selected.length; index++) { const end = index === selected.length || selected[index].index !== selected[index - 1].index + 1; if (!end) continue; const slice = selected.slice(start, index), points = contour.slice(start, index), pitchMean = points.reduce((sum, point) => sum + point.value, 0) / points.length, variance = points.reduce((sum, point) => sum + (point.value - pitchMean) * (point.value - pitchMean), 0) / points.length, meanEnergy = slice.reduce((sum, item) => sum + item.frame.rms, 0) / slice.length, meanConfidence = slice.reduce((sum, item) => sum + item.frame.pitchConfidence, 0) / slice.length, time = frameTime(slice[0].index, settings), endTime = frameTime(slice[slice.length - 1].index + 1, settings), centroidContour = smoothContour(slice.map(item => ({ time: frameTime(item.index, settings), value: item.frame.centroid, confidence: meanConfidence })), settings.contourSmoothingWindow), percussiveness = slice.reduce((sum, item) => sum + (item.frame.flux / Math.max(.001, item.frame.flux + item.frame.rms)), 0) / slice.length;
+          objects.push({ id: role + "-" + slice[0].index, onsetTime: time, offsetTime: endTime, sourceRole: role, drumKind: null, meanEnergy, sustainStability: clamp(1 - Math.sqrt(variance) / Math.max(40, pitchMean), 0, 1), percussiveness, pitchContour: points, centroidContour, voicingConfidence: meanConfidence, beatAlignedStart: null, beatAlignedEnd: null, sectionID: null, phraseID: null, importanceScore: clamp(meanEnergy * meanConfidence * 2, 0, 1), confidence: meanConfidence }); start = index; }
+        return { contour, objects };
+      }
+      function makeBeatGrid(onsets, tempo, duration, settings) { const beatDuration = 60 / (tempo > 0 ? tempo : 120), phase = bestPhase(onsets, beatDuration, beatDuration), beats = []; let time = phase, index = 0; while (time <= duration + 1e-9) { let closest = onsets[0], confidence = .2; for (const onset of onsets) if (!closest || Math.abs(onset.time - time) < Math.abs(closest.time - time)) closest = onset; if (closest) confidence = Math.max(.2, 1 - Math.abs(closest.time - time) / (beatDuration * .5)); beats.push({ index, time, barIndex: Math.floor(index / 4), beatInBar: index % 4, subdivisionIndex: 0, confidence }); time += beatDuration; index++; } return { tempo: tempo > 0 ? tempo : 120, beats, downbeats: beats.filter(beat => beat.beatInBar === 0).map(beat => beat.time), confidence: beats.length ? beats.reduce((sum, beat) => sum + beat.confidence, 0) / beats.length : 0 }; }
+      function averageEnergy(frames, start, end, settings) { const values = frames.map((frame, index) => ({ frame, time: frameTime(index, settings) })).filter(item => item.time >= start && item.time < end).map(item => item.frame.rms + item.frame.flux * .15); return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0; }
+      function centroidChange(frames, start, end, settings) { const values = frames.map((frame, index) => ({ frame, time: frameTime(index, settings) })).filter(item => item.time >= start && item.time < end).map(item => item.frame.centroid); if (values.length < 2) return 0; const midpoint = Math.floor(values.length / 2), left = values.slice(0, midpoint), right = values.slice(midpoint), leftMean = left.reduce((sum, value) => sum + value, 0) / Math.max(1, left.length), rightMean = right.reduce((sum, value) => sum + value, 0) / right.length; return Math.abs(rightMean - leftMean) / Math.max(100, leftMean, rightMean); }
+      function sectionsFor(frames, duration, tempo, settings) { const barDuration = 4 * 60 / (tempo > 0 ? tempo : 120), barCount = Math.max(1, Math.ceil(duration / barDuration)), energies = Array.from({ length: barCount }, (_, bar) => averageEnergy(frames, bar * barDuration, Math.min(duration, (bar + 1) * barDuration), settings)), starts = [0]; for (let bar = 1; bar < barCount; bar++) { const change = Math.abs(energies[bar] - energies[bar - 1]) / Math.max(.001, energies[bar], energies[bar - 1]); if (change >= settings.sectionBoundarySensitivity || centroidChange(frames, bar * barDuration, Math.min(duration, (bar + 1) * barDuration), settings) >= .35) starts.push(bar); } const sections = starts.map((startBar, index) => ({ id: index, startTime: startBar * barDuration, endTime: Math.min(duration, (index + 1 < starts.length ? starts[index + 1] : barCount) * barDuration), confidence: index === 0 ? .65 : .8 })); const phrases = []; let phraseID = 0; for (const section of sections) { let start = section.startTime; while (start < section.endTime - 1e-9) { const end = Math.min(section.endTime, start + barDuration * 4); phrases.push({ id: phraseID++, sectionID: section.id, startTime: start, endTime: end, confidence: section.confidence }); start = end; } } return { sections, phrases }; }
+      function drumEvents(frames, onsets, beats, sections, settings) { const result = []; let nextID = 0; [["kick", "lowFlux"], ["snare", "midFlux"], ["hihatLike", "highFlux"]].forEach(([kind, key]) => { const values = frames.map(frame => frame[key]), maximum = Math.max(maxOf(values), 0); if (!(maximum > 0)) return; const threshold = Math.max(maximum * .35, settings.onsetConfidenceThreshold * maximum); values.forEach((value, index) => { const previous = index > 0 ? values[index - 1] : 0, next = index + 1 < values.length ? values[index + 1] : 0; if (!(value >= threshold && value >= previous && value >= next && (value > previous || value > next))) return; const time = frameTime(index, settings), aligned = nearestBeat(time, beats, settings.beatSnapTolerance); result.push({ id: nextID++, kind, onsetTime: time, offsetTime: time + Math.max(.04, frameDuration(settings)), strength: value / maximum, confidence: Math.min(1, value / Math.max(.001, threshold)), beatAlignedStart: aligned, beatAlignedEnd: null, sectionID: sectionID(time, sections), phraseID: null }); }); }); return result.sort((a, b) => a.onsetTime - b.onsetTime || a.id - b.id); }
+      function createSustainCandidates(objects, beatGrid, sections, phrases, settings) { return objects.map(object => { if (object.sourceRole === "drum" || object.offsetTime - object.onsetTime < settings.minimumSustainDuration || object.sustainStability < settings.sustainStabilityThreshold || object.percussiveness >= settings.percussivenessRejectionThreshold || object.meanEnergy <= .01) return null; const roleBonus = object.sourceRole === "vocal" ? .22 : object.sourceRole === "melody" ? .18 : object.sourceRole === "bass" ? .08 : object.sourceRole === "accompaniment" ? .03 : -1, contourBonus = Math.min(.18, object.pitchContour.length * .04) + Math.min(.08, object.centroidContour.length * .02), durationScore = Math.min(1, (object.offsetTime - object.onsetTime) / 2), nearby = objects.filter(other => other.id !== object.id && Math.abs(other.onsetTime - object.onsetTime) < .5).length, clutterPenalty = Math.min(.3, Math.max(0, nearby - 1) * settings.dragCandidateClutterPenalty), score = clamp(durationScore * .28 + object.sustainStability * .28 + object.confidence * .18 + object.voicingConfidence * .08 + roleBonus + contourBonus - object.percussiveness * .22 - clutterPenalty, 0, 1); return { objectID: object.id, onsetTime: object.onsetTime, offsetTime: object.offsetTime, duration: object.offsetTime - object.onsetTime, sourceRole: object.sourceRole, meanEnergy: object.meanEnergy, sustainStability: object.sustainStability, percussiveness: object.percussiveness, pitchContour: object.pitchContour, centroidContour: object.centroidContour, voicingConfidence: object.voicingConfidence, beatAlignedStart: nearestBeat(object.onsetTime, beatGrid.beats, settings.beatSnapTolerance), beatAlignedEnd: nearestBeat(object.offsetTime, beatGrid.beats, settings.beatSnapTolerance), sectionID: sectionID(object.onsetTime, sections), phraseID: sectionID(object.onsetTime, phrases), importanceScore: object.importanceScore, confidence: object.confidence, sustainScore: score }; }).filter(Boolean).sort((a, b) => b.sustainScore - a.sustainScore || String(a.objectID).localeCompare(String(b.objectID))); }
+      function normalize(values) { const minimum = minOf(values), maximum = maxOf(values); return maximum > minimum ? values.map(value => (value - minimum) / (maximum - minimum)) : values.map(() => values.length ? 1 : 0); }
+      function intensityCurve(frames, onsets, duration, settings) { const count = Math.max(1, Math.ceil(duration)), rmsTotals = Array(count).fill(0), rmsCounts = Array(count).fill(0), density = Array(count).fill(0); frames.forEach((frame, index) => { const second = Math.min(count - 1, Math.max(0, Math.floor(frameTime(index, settings)))); rmsTotals[second] += frame.rms; rmsCounts[second]++; }); onsets.forEach(onset => { const second = Math.min(count - 1, Math.max(0, Math.floor(onset.time))); density[second]++; }); const rms = rmsTotals.map((total, index) => rmsCounts[index] ? total / rmsCounts[index] : 0), combined = normalize(rms).map((value, index) => .6 * value + .4 * normalize(density)[index]), smoothed = combined.map((value, index) => { const values = combined.slice(Math.max(0, index - 2), Math.min(combined.length, index + 3)); return values.reduce((sum, item) => sum + item, 0) / values.length; }); return normalize(smoothed); }
+      function rebuild(settings, duration) {
+        const frames = cachedFrames; if (!frames.length) { self.postMessage({ type: "analysis", analysis: null }); return; }
+        const tempo = tempoEstimate(frames, settings), onsets = detectOnsets(frames, settings, tempo, duration), beatGrid = makeBeatGrid(onsets, tempo, duration, settings), structure = sectionsFor(frames, duration, tempo, settings), separationFrames = frames.map((frame, index) => { const percussive = clamp(frame.flux / Math.max(.001, frame.flux + frame.rms), 0, 1); return { time: frameTime(index, settings), harmonicEnergy: 1 - percussive, percussiveEnergy: percussive, confidence: Math.abs(1 - 2 * percussive) }; });
+        const drums = drumEvents(frames, onsets, beatGrid.beats, structure.sections, settings), melody = contourAnalysis(frames, settings, "melody", 180, 3000), bass = contourAnalysis(frames, settings, "bass", 40, 250), vocal = contourAnalysis(frames, settings, "vocal", 150, 1200), objects = drums.map(event => ({ id: "drum-" + event.id, onsetTime: event.onsetTime, offsetTime: event.offsetTime, sourceRole: "drum", drumKind: event.kind, meanEnergy: event.strength, sustainStability: 0, percussiveness: 1, pitchContour: [], centroidContour: [], voicingConfidence: 0, beatAlignedStart: event.beatAlignedStart, beatAlignedEnd: event.beatAlignedEnd, sectionID: event.sectionID, phraseID: event.phraseID, importanceScore: event.strength, confidence: event.confidence })).concat(melody.objects, bass.objects, vocal.objects).concat(frames.map((frame, index) => frame.mid > frame.bass * 1.1 && frame.mid > frame.treble * 1.1 && frame.pitchConfidence < .55 && frame.flux < Math.max(.01, frame.rms * 1.5) ? { id: "accompaniment-" + index, onsetTime: frameTime(index, settings), offsetTime: frameTime(index, settings) + frameDuration(settings), sourceRole: "accompaniment", drumKind: null, meanEnergy: frame.mid, sustainStability: .6, percussiveness: .15, pitchContour: [], centroidContour: [{ time: frameTime(index, settings), value: frame.centroid, confidence: .6 }], voicingConfidence: 0, beatAlignedStart: null, beatAlignedEnd: null, sectionID: null, phraseID: null, importanceScore: frame.mid, confidence: .55 } : null).filter(Boolean));
+        objects.sort((a, b) => a.onsetTime - b.onsetTime || a.offsetTime - b.offsetTime || roleOrder(a.sourceRole) - roleOrder(b.sourceRole) || String(a.id).localeCompare(String(b.id))); objects.forEach((object, index) => { object.id = index + 1; object.beatAlignedStart = object.beatAlignedStart == null ? nearestBeat(object.onsetTime, beatGrid.beats, settings.beatSnapTolerance) : object.beatAlignedStart; object.beatAlignedEnd = object.beatAlignedEnd == null ? nearestBeat(object.offsetTime, beatGrid.beats, settings.beatSnapTolerance) : object.beatAlignedEnd; object.sectionID = object.sectionID == null ? sectionID(object.onsetTime, structure.sections) : object.sectionID; object.phraseID = object.phraseID == null ? sectionID(object.onsetTime, structure.phrases) : object.phraseID; });
+        const mean = key => frames.reduce((sum, frame) => sum + frame[key], 0) / frames.length, candidates = createSustainCandidates(objects, beatGrid, structure.sections, structure.phrases, settings), confidence = objects.length ? objects.reduce((sum, object) => sum + object.confidence, 0) / objects.length : 0;
+        self.postMessage({ type: "progress", value: 1 }); self.postMessage({ type: "analysis", analysis: { schemaVersion: 2, duration, tempo, onsets, meanBass: mean("bass"), meanMid: mean("mid"), meanTreble: mean("treble"), meanRMS: mean("rms"), intensityCurve: intensityCurve(frames, onsets, duration, settings), analyzerBackend: "dsp.v1.browser", configuration: settings, beatGrid, sections: structure.sections, phrases: structure.phrases, separationFrames, drumEvents: drums, melodyContour: melody.contour, bassContour: bass.contour, vocalSpans: objects.filter(object => object.sourceRole === "vocal"), stemFrames: frames.map((frame, index) => { const total = Math.max(.001, frame.bass + frame.mid + frame.treble), harmonic = 1 - Math.min(1, frame.flux / Math.max(.001, frame.flux + frame.rms)); return { time: frameTime(index, settings), drumEnergy: Math.min(1, frame.flux / Math.max(.001, frame.flux + frame.rms)), bassEnergy: Math.min(1, frame.bass / total), melodyEnergy: Math.min(1, harmonic * frame.mid / total), vocalEnergy: frame.pitchConfidence * Math.min(1, frame.mid / total), accompanimentEnergy: Math.min(1, harmonic * frame.treble / total) }; }), musicalObjects: objects, sustainCandidates: candidates, analysisConfidence: confidence, frames } });
+      }
+      function roleOrder(role) { return role === "drum" ? 0 : role === "bass" ? 1 : role === "melody" ? 2 : role === "vocal" ? 3 : 4; }
+      self.onmessage = event => { const message = event.data; if (message.type === "analyzeSamples") { cachedFrames = spectralAnalyze(new Float32Array(message.samples), message.settings); self.postMessage({ type: "progress", value: .72 }); rebuild(message.settings, message.duration); } else if (message.type === "rebuild") rebuild(message.settings, message.duration); };
+    `;
+
+    function createWorker() {
+      if (!window.Worker) return null;
+      const url = URL.createObjectURL(new Blob([workerSource], { type: "application/javascript" }));
+      const worker = new Worker(url); URL.revokeObjectURL(url); return worker;
+    }
+    function numberValue(id) { return Number($(id).value); }
+    function copySettings() { return structuredClone(state.settings); }
+    function setSetting(id, value) { $(id).value = value; updateOutput(id); }
+    function updateOutput(id) { const input = $(id), output = $(id + "Out"); if (!input || !output) return; const value = input.value; output.textContent = Number.isFinite(Number(value)) ? Number(value).toFixed(Number(value) < 1 ? 3 : 1).replace(/\.0+$/, "") : value; }
+    function syncControlsFromSettings() {
+      const s = state.settings;
+      ["onsetConfidenceThreshold", "minimumGap", "mergeWindow", "sectionBoundarySensitivity", "maxNotesPerSecond", "strengthPercentile", "maxSimultaneous", "dragRatio", "minimumSustainDuration", "sustainStabilityThreshold", "dragMinDuration", "dragMaxDuration", "antiRepeatStrength"].forEach(id => setSetting(id, s[id]));
+      ["low", "mid", "high"].forEach(band => setSetting("band" + band[0].toUpperCase() + band.slice(1) + "Threshold", s.bandThresholds[band]));
+      Object.keys(s.laneMappingWeights).forEach(role => setSetting("lane" + role[0].toUpperCase() + role.slice(1), s.laneMappingWeights[role]));
+      $("difficulty").value = s.difficulty || "normal"; $("seed").value = String(s.seed);
+      $("settingsJson").value = JSON.stringify(exportableSettings(), null, 2);
+    }
+    function exportableSettings() { const settings = copySettings(); settings.difficulty = $("difficulty").value; return settings; }
+    function applyDifficultyDefaults() { const profile = PROFILES[$("difficulty").value]; state.settings.difficulty = $("difficulty").value; state.settings.dragRatio = profile.dragRatio; state.settings.maxNotesPerSecond = 0; state.settings.strengthPercentile = -1; state.settings.maxSimultaneous = 2; state.settings.minimumSustainDuration = profile.minimumSustainDuration; syncControlsFromSettings(); }
+    function scheduleRegeneration() { if (state.analysis) regenerateAll(); }
+    function scheduleAnalysisRebuild() { if (!state.analysis || !state.worker) return; state.worker.postMessage({ type: "rebuild", settings: state.settings, duration: state.analysis.duration }); }
+
+    class SplitMix64 {
+      constructor(seed) { this.state = BigInt(String(seed || "0").replace(/\D/g, "") || "0") & ((1n << 64n) - 1n); }
+      next() { this.state = (this.state + 0x9E3779B97F4A7C15n) & ((1n << 64n) - 1n); let value = this.state; value = ((value ^ (value >> 30n)) * 0xBF58476D1CE4E5B9n) & ((1n << 64n) - 1n); value = ((value ^ (value >> 27n)) * 0x94D049BB133111EBn) & ((1n << 64n) - 1n); return value ^ (value >> 31n); }
+      double() { return Number(this.next() >> 11n) / 9007199254740992; }
+      int(upperBound) { return Number(this.next() % BigInt(upperBound)); }
+    }
+    function roleForBand(band) { return band === "low" ? "bass" : band === "mid" ? "accompaniment" : "melody"; }
+    function bandForRole(role) { return role === "drum" || role === "bass" ? "low" : role === "melody" || role === "vocal" ? "mid" : "high"; }
+    function percentile(values, percent) { if (!values.length) return 0; if (values.length === 1) return values[0]; const position = percent / 100 * (values.length - 1), lower = Math.floor(position), upper = Math.min(values.length - 1, lower + 1); return values[lower] + (values[upper] - values[lower]) * (position - lower); }
+    function percentileRank(value, sortedValues) { if (!sortedValues.length || sortedValues[sortedValues.length - 1] <= sortedValues[0]) return .5; const index = sortedValues.findIndex(item => item >= value); return (index < 0 ? sortedValues.length : index) / (sortedValues.length - 1); }
+    function intensityAt(time, curve) { if (!curve.length) return 1; return Math.max(0, Math.min(1, curve[Math.min(curve.length - 1, Math.max(0, Math.floor(time)))])); }
+    function beatDuration(tempo) { return 60 / (tempo > 0 ? tempo : 120); }
+    function subdivisionFor(profile, tempo) { return beatDuration(tempo) / Math.max(1, profile.subdivisionDenominator); }
+    function gridPhase(beatGrid, subdivision) { const firstBeat = beatGrid.beats[0] ? beatGrid.beats[0].time : 0; return firstBeat - Math.floor(firstBeat / subdivision) * subdivision; }
+    function snappedTime(time, subdivision, duration, phase, tolerance) { const snapped = phase + Math.round((time - phase) / subdivision) * subdivision, resolved = Math.abs(snapped - time) <= Math.min(subdivision * .25, tolerance) ? snapped : time; return Math.max(0, Math.min(duration, resolved)); }
+    function rolePriority(role) { return role === "drum" ? 0 : role === "bass" ? 1 : role === "melody" ? 2 : role === "vocal" ? 3 : 4; }
+    function sourceLabel(note) { return note.sourceRole === "drum" ? note.drumKind === "hihatLike" ? "hat" : note.drumKind || "drum" : note.kind === "drag" && note.sourceRole === "vocal" ? "vocal-sustain" : note.sourceRole || "unknown"; }
+    function cullByRate(events, cap, preferred) {
+      const sorted = events.slice().sort(eventSort), active = [], result = []; let index = 0;
+      while (index < sorted.length) { const start = index, time = sorted[index].time; while (index < sorted.length && sorted[index].time === time) index++; const group = sorted.slice(start, index).sort((a, b) => (preferred.has(a.sourceObjectID) ? -1 : 0) - (preferred.has(b.sourceObjectID) ? -1 : 0) || eventSort(a, b)); while (active.length && active[0].time <= time - 1) active.shift(); const nonChords = group.filter(event => !event.isChord).slice(0, 1), chords = group.filter(event => event.isChord).slice(0, 2), keep = nonChords.concat(chords); while (active.length + keep.length > cap) { const removable = active.find(event => !preferred.has(event.sourceObjectID)) || active.find(event => event.isChord) || active[0]; if (!removable) break; active.splice(active.indexOf(removable), 1); const position = result.indexOf(removable); if (position >= 0) result.splice(position, 1); } if (active.length + keep.length <= cap) { active.push(...keep); result.push(...keep); } }
+      return result.sort(eventSort);
+    }
+    function eventSort(a, b) { return a.time - b.time || (a.isChord ? 1 : 0) - (b.isChord ? 1 : 0) || a.identity - b.identity; }
+    function enforceMinimumSequentialGap(events) { const sorted = events.slice().sort(eventSort), result = []; let lastTime = null, index = 0; while (index < sorted.length) { const time = sorted[index].time, group = []; while (index < sorted.length && Math.abs(sorted[index].time - time) <= 1e-9) group.push(sorted[index++]); if (lastTime !== null && time - lastTime < minimumSequentialGap - 1e-9) continue; result.push(...group); lastTime = time; } return result; }
+    function objectEvents(analysis, difficulty, settings, profile) {
+      const policy = profile, candidates = new Map(); analysis.sustainCandidates.forEach(candidate => { const existing = candidates.get(candidate.objectID); if (!existing || candidate.importanceScore > existing.importanceScore || candidate.sustainScore > existing.sustainScore) candidates.set(candidate.objectID, candidate); });
+      return analysis.musicalObjects.filter(object => policy.activeRoles.includes(object.sourceRole) && object.confidence >= policy.minimumConfidence && object.importanceScore * (settings.layerImportanceWeights[object.sourceRole] || 1) >= policy.minimumConfidence * .5).map(object => { const candidate = candidates.get(object.id); return { id: object.id, time: candidate ? Math.max(3, candidate.onsetTime) : object.onsetTime, duration: object.offsetTime - object.onsetTime, sourceRole: object.sourceRole, sourceObjectID: object.id, drumKind: object.drumKind, confidence: object.confidence, importance: object.importanceScore, isSustained: Boolean(candidate), sustainCandidate: candidate }; }).sort((a, b) => a.time - b.time || rolePriority(a.sourceRole) - rolePriority(b.sourceRole) || a.id - b.id); }
+    function playableCandidate(candidate, settings) { const start = Math.max(candidate.onsetTime, 3), end = candidate.offsetTime; if (end <= start) return null; return Object.assign({}, candidate, { onsetTime: start, duration: end - start, pitchContour: candidate.pitchContour.filter(point => point.time >= start - 1e-9), centroidContour: candidate.centroidContour.filter(point => point.time >= start - 1e-9) }); }
+    function generateBeatmap(analysis, difficulty, settings, selectedDifficulty) {
+      const base = PROFILES[difficulty], isSelected = difficulty === selectedDifficulty, profile = Object.assign({}, base, { maxNotesPerSecond: isSelected && settings.maxNotesPerSecond > 0 ? settings.maxNotesPerSecond : base.maxNotesPerSecond, strengthPercentile: isSelected && settings.strengthPercentile >= 0 ? settings.strengthPercentile : base.strengthPercentile, maxSimultaneous: 2, dragRatio: isSelected ? settings.dragRatio : base.dragRatio, minimumSustainDuration: isSelected ? settings.minimumSustainDuration : base.minimumSustainDuration });
+      const subdivision = subdivisionFor(profile, analysis.tempo), phase = gridPhase(analysis.beatGrid, subdivision), cap = Math.ceil(profile.maxNotesPerSecond), events = objectEvents(analysis, difficulty, settings, profile), usesMIR = events.length > 0, candidatesByID = new Map(), eligible = [];
+      analysis.sustainCandidates.forEach(candidate => { const usable = playableCandidate(candidate, settings); if (usable && usable.sourceRole !== "drum" && usable.duration >= profile.minimumSustainDuration && usable.duration >= settings.dragMinDuration && usable.sustainStability >= settings.sustainStabilityThreshold && usable.confidence >= profile.minimumConfidence) { candidatesByID.set(usable.objectID, usable); eligible.push(usable); } });
+      eligible.sort((a, b) => b.sustainScore - a.sustainScore || a.objectID - b.objectID); const dragCount = profile.dragRatio > 0 ? Math.min(eligible.length, Math.max(1, Math.ceil(eligible.length * profile.dragRatio))) : 0, chosen = eligible.slice(0, dragCount), dragIDs = new Set(chosen.map(candidate => candidate.objectID));
+      let pattern = (usesMIR ? events : analysis.onsets.filter(onset => onset.time >= 3).map((onset, index) => ({ id: index, time: onset.time, importance: onset.strength, centroid: onset.centroid, sourceRole: roleForBand(onset.band), sourceObjectID: null, drumKind: null, sustainCandidate: null }))).map(event => ({ identity: event.id, source: { index: event.id, onset: { time: event.time, strength: event.importance, centroid: event.sustainCandidate && event.sustainCandidate.centroidContour[0] ? event.sustainCandidate.centroidContour[0].value : event.centroid || 440, band: bandForRole(event.sourceRole), bass: event.sourceRole === "bass" ? 1 : .2, mid: event.sourceRole === "melody" || event.sourceRole === "vocal" ? 1 : .2, treble: event.sourceRole === "accompaniment" ? 1 : .2 } }, time: snappedTime(event.time, subdivision, analysis.duration, phase, settings.beatSnapTolerance), isPrimary: true, isChord: false, band: bandForRole(event.sourceRole), sourceRole: event.sourceRole, sourceObjectID: event.sourceObjectID, drumKind: event.drumKind, sustainCandidate: event.sustainCandidate })).sort(eventSort);
+      chosen.forEach(candidate => { const time = snappedTime(candidate.onsetTime, subdivision, analysis.duration, phase, settings.beatSnapTolerance); if (!pattern.some(event => event.sourceObjectID === candidate.objectID && Math.abs(event.time - time) <= 1e-9)) pattern.push({ identity: candidate.objectID, source: { index: candidate.objectID, onset: { time: candidate.onsetTime, strength: candidate.importanceScore, centroid: candidate.centroidContour[0] ? candidate.centroidContour[0].value : 440, band: bandForRole(candidate.sourceRole) } }, time, isPrimary: true, isChord: false, band: bandForRole(candidate.sourceRole), sourceRole: candidate.sourceRole, sourceObjectID: candidate.objectID, drumKind: null, sustainCandidate: candidate }); });
+      pattern = enforceMinimumSequentialGap(cullByRate(pattern, cap, dragIDs));
+      const centroidValues = analysis.onsets.map(onset => onset.centroid).sort((a, b) => a - b), groups = []; pattern.sort(eventSort); let groupIndex = 0;
+      while (groupIndex < pattern.length) { const time = pattern[groupIndex].time, group = []; while (groupIndex < pattern.length && Math.abs(pattern[groupIndex].time - time) <= 1e-9) group.push(pattern[groupIndex++]); group.sort((a, b) => (dragIDs.has(a.sourceObjectID) ? -1 : 0) - (dragIDs.has(b.sourceObjectID) ? -1 : 0) || (b.source.onset.strength - a.source.onset.strength) || a.identity - b.identity); groups.push(group.slice(0, profile.maxSimultaneous)); }
+      const rng = new SplitMix64(settings.seed), notes = [], laneHistory = []; let previousLane = null;
+      groups.forEach(group => group.forEach(event => { const lane = assignLane(event, centroidValues, profile, settings, previousLane, group.map(item => item._lane).filter(Number.isInteger), laneHistory, rng); event._lane = lane; previousLane = lane; laneHistory.push(lane); if (laneHistory.length > 8) laneHistory.shift(); const candidate = dragIDs.has(event.sourceObjectID) ? candidatesByID.get(event.sourceObjectID) : null; let duration = 0; if (candidate) { const maximum = Math.min(candidate.duration, settings.dragMaxDuration, Math.min(4, beatDuration(analysis.tempo) * 8)); duration = maximum >= subdivision ? Math.floor(maximum / subdivision) * subdivision : 0; if (duration < settings.dragMinDuration) duration = 0; } const lanePath = duration > 0 && candidate ? makeContourLanePath(candidate, lane, duration, profile.laneCount, settings) : []; notes.push({ identity: event.identity, kind: duration > 0 ? "drag" : "tap", time: event.time, lane, duration, lanePath, sourceRole: event.sourceRole, drumKind: event.drumKind }); }));
+      const placed = enforcePlacementLimits(notes, profile.maxSimultaneous, rng), minimumLaneGap = difficulty === "heaven" || difficulty === "easy" ? .25 : .12, noSpanConflicts = removeDragSpanConflicts(placed, profile.laneCount, profile.maxSimultaneous, minimumLaneGap), finalNotes = enforceSameLaneGap(noSpanConflicts, minimumLaneGap).filter(note => note.time >= 3).sort(noteSort).map((note, index) => Object.assign({}, note, { id: makeID(settings.seed, index) }));
+      return { difficulty, laneCount: profile.laneCount, tempo: analysis.tempo, notes: finalNotes, npsCap: profile.maxNotesPerSecond };
+    }
+    function assignLane(event, centroidValues, profile, settings, previousLane, occupied, recent, rng) { const role = event.sourceRole, band = event.band, region = band === "low" ? [0, Math.max(0, Math.floor((profile.laneCount - 1) / 2))] : band === "mid" ? [Math.max(0, Math.floor(profile.laneCount / 3)), Math.min(profile.laneCount - 1, Math.floor(profile.laneCount * 2 / 3))] : [Math.min(profile.laneCount - 1, Math.floor(profile.laneCount * 2 / 3)), profile.laneCount - 1], width = region[1] - region[0] + 1, bias = settings.laneMappingWeights[role] || 0, centroid = percentileRank(event.source.onset.centroid || 0, centroidValues), position = Math.max(0, Math.min(width - 1, Math.floor((centroid + bias * .35 + .5) * width))), base = region[0] + position, direction = rng.double() < .5 ? -1 : 1, variation = rng.double(); let preferred = base; if (previousLane === base && variation < .6) preferred += direction; else if (variation < .2) preferred += direction; else if (profile.laneCount >= 6 && variation > .82) preferred += direction * 2; preferred = Math.max(region[0], Math.min(region[1], preferred)); const offsets = [0, 1, -1, 2, -2, 3, -3], candidates = offsets.map(offset => preferred + offset).filter(lane => lane >= region[0] && lane <= region[1]); const repeats = candidate => { if (recent.length >= 2 && recent[recent.length - 1] === candidate && recent[recent.length - 2] === candidate) return true; if (recent.length >= 8) { const first = recent.slice(-8, -4), second = recent.slice(-4); return first.join(",") === second.join(",") && candidate === first[0]; } return false; }; return candidates.find(lane => !occupied.includes(lane) && (!repeats(lane) || rng.double() > settings.antiRepeatStrength)) ?? candidates.find(lane => !occupied.includes(lane)) ?? preferred; }
+    function makeContourLanePath(candidate, startLane, duration, laneCount, settings) { const contour = candidate.pitchContour.length >= 2 ? candidate.pitchContour : candidate.centroidContour; if (contour.length < 2 || duration < minimumLaneStepInterval) return []; const values = contour.map(point => point.value), minimum = Math.min(...values), maximum = Math.max(...values); if (!(maximum > minimum)) return []; let current = startLane, nextOffset = minimumLaneStepInterval, path = []; contour.slice(1).forEach(point => { const target = Math.max(0, Math.min(laneCount - 1, Math.round((point.value - minimum) / (maximum - minimum) * (laneCount - 1)))); while (current !== target && nextOffset <= duration + 1e-9) { current += target > current ? 1 : -1; path.push({ offset: Math.min(duration, nextOffset), lane: current }); nextOffset += minimumLaneStepInterval; } }); return path; }
+    function isDragActive(note, time) { return note.kind === "drag" && time >= note.time - 1e-9 && time < note.time + note.duration - 1e-9; }
+    function tapConflictsWithDragSpan(tap, drags) { return drags.some(drag => { const lanes = [drag.lane].concat(drag.lanePath.map(frame => frame.lane)), low = Math.floor(Math.min(...lanes)), high = Math.ceil(Math.max(...lanes)), start = drag.time - dragSpanPadding, end = drag.time + drag.duration + dragSpanPadding; return tap.time >= start - 1e-9 && tap.time <= end + 1e-9 && tap.lane >= low && tap.lane <= high; }); }
+    function enforcePlacementLimits(notes, maxSimultaneous, rng) { const sorted = notes.slice().sort(noteSort), result = []; let index = 0; while (index < sorted.length) { const time = sorted[index].time, group = []; while (index < sorted.length && Math.abs(sorted[index].time - time) <= 1e-9) group.push(sorted[index++]); const active = result.filter(note => isDragActive(note, time)), available = Math.max(0, maxSimultaneous - active.length), activeDrags = active.length, keptDrags = group.filter(note => note.kind === "drag").slice(0, Math.min(available, Math.max(0, 2 - activeDrags))), activeAndKept = active.concat(keptDrags); result.push(...keptDrags); let used = active.length + keptDrags.length; group.filter(note => note.kind === "tap").forEach(tap => { if (used < maxSimultaneous && !tapConflictsWithDragSpan(tap, activeAndKept)) { result.push(tap); used++; } }); group.filter(note => note.kind === "drag").slice(keptDrags.length).forEach(drag => { if (active.length + keptDrags.length >= 2 && rng.double() < .75 && used < maxSimultaneous && !tapConflictsWithDragSpan(drag, activeAndKept)) { result.push(Object.assign({}, drag, { kind: "tap", duration: 0, lanePath: [] })); used++; } }); } return result.sort(noteSort); }
+    function removeDragSpanConflicts(notes, laneCount, maxSimultaneous, minimumGap) { const drags = notes.filter(note => note.kind === "drag"), planned = notes.slice().sort(noteSort); for (let index = 0; index < planned.length;) { if (planned[index].kind !== "tap" || !tapConflictsWithDragSpan(planned[index], drags)) { index++; continue; } const candidate = planned[index], lanes = []; for (let distance = 1; distance <= Math.max(candidate.lane, laneCount - 1 - candidate.lane); distance++) { if (candidate.lane - distance >= 0) lanes.push(candidate.lane - distance); if (candidate.lane + distance < laneCount) lanes.push(candidate.lane + distance); } const relocated = lanes.find(lane => { const copy = Object.assign({}, candidate, { lane }); return !tapConflictsWithDragSpan(copy, drags) && planned.filter(note => Math.abs(note.time - candidate.time) <= 1e-9).length <= maxSimultaneous && !planned.some(other => other !== candidate && other.lane === lane && Math.abs(other.time - candidate.time) < minimumGap - 1e-9); }); if (relocated === undefined) planned.splice(index, 1); else { planned[index].lane = relocated; index++; } } return planned.sort(noteSort); }
+    function enforceSameLaneGap(notes, minimumGap) { const last = new Map(), result = []; notes.slice().sort(noteSort).forEach(note => { if (last.has(note.lane) && note.time - last.get(note.lane) < minimumGap - 1e-9) return; result.push(note); last.set(note.lane, note.time); }); return result; }
+    function noteSort(a, b) { return a.time - b.time || a.lane - b.lane || (a.kind === "drag" ? -1 : 1) - (b.kind === "drag" ? -1 : 1) || a.identity - b.identity; }
+    function splitMixValue(value) { let result = (BigInt(value) + 0x9E3779B97F4A7C15n) & ((1n << 64n) - 1n); result = ((result ^ (result >> 30n)) * 0xBF58476D1CE4E5B9n) & ((1n << 64n) - 1n); result = ((result ^ (result >> 27n)) * 0x94D049BB133111EBn) & ((1n << 64n) - 1n); return result ^ (result >> 31n); }
+    function makeID(seed, index) { const numericSeed = BigInt(String(seed || "0").replace(/\D/g, "") || "0"), high = splitMixValue(numericSeed + BigInt(index + 1) * 0x9E3779B97F4A7C15n), low = splitMixValue(high); return high.toString(16).padStart(16, "0") + low.toString(16).padStart(16, "0"); }
+
+    function formatDuration(value) { return value.toFixed(2) + "s"; }
+    function statsFor(beatmap, duration) { const notes = beatmap.notes, drags = notes.filter(note => note.kind === "drag"), taps = notes.length - drags.length, roleCounts = {}; notes.forEach(note => { const role = sourceLabel(note); roleCounts[role] = (roleCounts[role] || 0) + 1; }); const curve = Array(Math.max(1, Math.ceil(duration))).fill(0); notes.forEach(note => { curve[Math.min(curve.length - 1, Math.max(0, Math.floor(note.time)))]++; }); return { total: notes.length, taps, drags: drags.length, tapRatio: notes.length ? taps / notes.length : 0, dragRatio: notes.length ? drags.length / notes.length : 0, nps: duration > 0 ? notes.length / duration : 0, curve, roleCounts, averageDrag: drags.length ? drags.reduce((sum, note) => sum + note.duration, 0) / drags.length : 0 }; }
+    function colorForNote(note) { return ROLE_COLORS[note.sourceRole === "drum" ? note.drumKind || "drum" : note.sourceRole] || "#fff"; }
+
+    function fitCanvas(canvas, cssWidth, cssHeight) { const ratio = window.devicePixelRatio || 1; canvas.width = Math.max(1, Math.round(cssWidth * ratio)); canvas.height = Math.max(1, Math.round(cssHeight * ratio)); canvas.style.width = cssWidth + "px"; canvas.style.height = cssHeight + "px"; const context = canvas.getContext("2d"); context.setTransform(ratio, 0, 0, ratio, 0, 0); return context; }
+    function drawOverview() { const canvas = $("overviewCanvas"), width = Math.max(300, canvas.clientWidth || 800), height = 156, context = fitCanvas(canvas, width, height); context.fillStyle = "#090d15"; context.fillRect(0, 0, width, height); if (!state.analysis) { context.fillStyle = "#8994a8"; context.fillText("오디오 대기", 16, 28); return; } const analysis = state.analysis, duration = Math.max(.01, analysis.duration), frameWidth = width / Math.max(1, analysis.frames.length); context.strokeStyle = "#1d2636"; context.lineWidth = 1; analysis.frames.forEach((frame, index) => { const x = index * frameWidth, y = height * .5, amplitude = Math.min(1, frame.rms * 9 + frame.flux * .08) * height * .36; context.strokeStyle = "#2a6b80"; context.beginPath(); context.moveTo(x, y - amplitude); context.lineTo(x, y + amplitude); context.stroke(); }); if (state.waveform.length) { const sampleWidth = width / state.waveform.length; state.waveform.forEach((amplitude, index) => { const x = index * sampleWidth, y = height * .5, half = Math.min(1, amplitude) * height * .36; context.strokeStyle = "#3d93ad"; context.beginPath(); context.moveTo(x, y - half); context.lineTo(x, y + half); context.stroke(); }); } analysis.sections.forEach(section => { const x = section.startTime / duration * width; context.strokeStyle = "#63e6ae"; context.globalAlpha = .55; context.beginPath(); context.moveTo(x, 0); context.lineTo(x, height); context.stroke(); context.globalAlpha = 1; }); analysis.beatGrid.beats.forEach(beat => { const x = beat.time / duration * width; context.strokeStyle = beat.beatInBar === 0 ? "#fff" : "#526078"; context.globalAlpha = beat.beatInBar === 0 ? .75 : .4; context.beginPath(); context.moveTo(x, height - 25); context.lineTo(x, height); context.stroke(); context.globalAlpha = 1; }); analysis.onsets.forEach(onset => { const x = onset.time / duration * width; context.fillStyle = onset.band === "low" ? "#63b7ff" : onset.band === "mid" ? "#c68cff" : "#f4d35e"; context.globalAlpha = .45 + onset.strength * .55; context.beginPath(); context.arc(x, 20 + (onset.band === "low" ? 0 : onset.band === "mid" ? 13 : 26), 2 + onset.strength * 3, 0, Math.PI * 2); context.fill(); context.globalAlpha = 1; }); }
+    function drawNoteMap() { const canvas = $("noteCanvas"), duration = state.analysis ? state.analysis.duration : 60, width = Math.max(900, duration * 24), height = 300, context = fitCanvas(canvas, width, height); $("timelineInner").style.width = width + "px"; context.fillStyle = "#090d15"; context.fillRect(0, 0, width, height); if (!state.analysis) { context.fillStyle = "#8994a8"; context.fillText("노트맵 대기", 16, 28); return; } const difficulty = $("difficulty").value, beatmap = state.beatmaps[difficulty], laneCount = beatmap ? beatmap.laneCount : PROFILES[difficulty].laneCount, laneHeight = height / laneCount, scale = width / Math.max(.01, state.analysis.duration); for (let lane = 0; lane < laneCount; lane++) { const y = lane * laneHeight; context.fillStyle = lane % 2 ? "#0c121d" : "#0a1019"; context.fillRect(0, y, width, laneHeight); context.strokeStyle = "#253047"; context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); context.fillStyle = "#6e7a90"; context.fillText("L" + (lane + 1), 5, y + 15); } if (beatmap) beatmap.notes.forEach(note => { const x = note.time * scale, y = note.lane * laneHeight + laneHeight * .5, color = colorForNote(note); context.strokeStyle = color; context.fillStyle = color; if (note.kind === "drag") { context.globalAlpha = .3; context.lineWidth = Math.max(5, laneHeight * .24); context.beginPath(); context.moveTo(x, y); let currentLane = note.lane; note.lanePath.forEach(frame => { const nextX = x + frame.offset * scale, nextY = frame.lane * laneHeight + laneHeight * .5; context.lineTo(nextX, nextY); currentLane = frame.lane; }); context.stroke(); context.globalAlpha = 1; context.beginPath(); context.arc(x, y, Math.max(4, laneHeight * .13), 0, Math.PI * 2); context.fill(); context.strokeStyle = "#fff"; context.globalAlpha = .75; context.beginPath(); context.arc(x, y, Math.max(7, laneHeight * .21), 0, Math.PI * 2); context.stroke(); context.globalAlpha = 1; } else { context.globalAlpha = .9; context.fillRect(x - 3, y - laneHeight * .18, 7, laneHeight * .36); context.globalAlpha = 1; } }); }
+    function drawNPS(stats) { const canvas = $("npsCanvas"), width = Math.max(260, canvas.clientWidth || 600), height = 110, context = fitCanvas(canvas, width, height); context.fillStyle = "#090d15"; context.fillRect(0, 0, width, height); if (!stats) return; let maximum = 1; stats.curve.forEach(value => { maximum = Math.max(maximum, value); }); context.strokeStyle = "#30415b"; context.beginPath(); context.moveTo(0, height - 1); context.lineTo(width, height - 1); context.stroke(); context.fillStyle = "#6ddcff"; stats.curve.forEach((value, index) => { const barWidth = width / stats.curve.length; const barHeight = value / maximum * (height - 15); context.globalAlpha = .35 + value / maximum * .65; context.fillRect(index * barWidth + 1, height - barHeight, Math.max(1, barWidth - 2), barHeight); }); context.globalAlpha = 1; context.fillStyle = "#8994a8"; context.fillText("1초 단위 노트 수", 7, 15); }
+    function drawPreview(now) { const canvas = $("previewCanvas"), width = Math.max(260, canvas.clientWidth || 330), height = 220, context = fitCanvas(canvas, width, height); context.fillStyle = "#090d15"; context.fillRect(0, 0, width, height); const difficulty = $("difficulty").value, beatmap = state.beatmaps[difficulty], laneCount = beatmap ? beatmap.laneCount : PROFILES[difficulty].laneCount, laneWidth = width / laneCount, receptorY = height - 30; for (let lane = 0; lane < laneCount; lane++) { context.fillStyle = lane % 2 ? "#111927" : "#0e1622"; context.fillRect(lane * laneWidth, 0, laneWidth, height); context.strokeStyle = "#2b3950"; context.strokeRect(lane * laneWidth, 0, laneWidth, height); } context.strokeStyle = "#fff"; context.lineWidth = 2; context.beginPath(); context.moveTo(0, receptorY); context.lineTo(width, receptorY); context.stroke(); if (!beatmap) return; const travel = 3, scale = (receptorY - 15) / travel; beatmap.notes.forEach(note => { const delta = note.time - now; if (delta < -.4 || delta > travel) return; const x = (note.lane + .5) * laneWidth, y = receptorY - delta * scale, color = colorForNote(note); context.fillStyle = color; context.strokeStyle = color; if (note.kind === "drag") { context.globalAlpha = .32; context.lineWidth = 11; context.beginPath(); context.moveTo(x, y); context.lineTo(x, Math.min(receptorY, y + note.duration * scale)); context.stroke(); context.globalAlpha = 1; } context.beginPath(); context.arc(x, y, 8, 0, Math.PI * 2); context.fill(); context.strokeStyle = "#fff"; context.globalAlpha = .7; context.beginPath(); context.arc(x, y, 12, 0, Math.PI * 2); context.stroke(); context.globalAlpha = 1; }); context.fillStyle = "#8994a8"; context.fillText("t = " + now.toFixed(2) + "s", 8, 15); }
+    function renderAll() { drawOverview(); drawNoteMap(); const difficulty = $("difficulty").value, beatmap = state.beatmaps[difficulty], stats = beatmap && state.analysis ? statsFor(beatmap, state.analysis.duration) : null; drawNPS(stats); drawPreview($("audio").currentTime || 0); $("timelineMeta").textContent = beatmap ? PROFILES[difficulty].displayName + " · " + beatmap.laneCount + "레인 · " + beatmap.notes.length + "개" : "-"; $("previewMeta").textContent = beatmap ? beatmap.laneCount + "레인" : "-"; renderStats(stats); }
+    function renderStats(selectedStats) { const body = $("statsBody"), difficulty = $("difficulty").value; body.innerHTML = ""; Object.keys(PROFILES).forEach(key => { const map = state.beatmaps[key]; if (!map || !state.analysis) return; const stats = statsFor(map, state.analysis.duration), row = document.createElement("tr"); if (key === difficulty) row.className = "selected"; row.innerHTML = "<td>" + PROFILES[key].displayName + "</td><td>" + map.laneCount + "</td><td>" + stats.total + "</td><td>" + stats.nps.toFixed(2) + "</td><td>" + stats.taps + "/" + stats.drags + "</td><td>" + formatDuration(stats.averageDrag) + "</td>"; body.appendChild(row); }); if (!selectedStats) { $("metricGrid").innerHTML = "<div class='empty'>분석 후 통계 표시</div>"; $("roleCounts").textContent = "-"; $("selectedStatMeta").textContent = "-"; return; } $("metricGrid").innerHTML = [["총 노트", selectedStats.total], ["탭 / 드래그", selectedStats.taps + " / " + selectedStats.drags], ["평균 NPS", selectedStats.nps.toFixed(2)]].map(item => "<div class='metric-box'><small>" + item[0] + "</small><span class='metric'>" + item[1] + "</span></div>").join(""); $("roleCounts").textContent = "역할별: " + Object.entries(selectedStats.roleCounts).map(([role, count]) => role + " " + count).join(" · "); $("selectedStatMeta").textContent = PROFILES[difficulty].displayName + " · 드래그 " + (selectedStats.dragRatio * 100).toFixed(1) + "%"; }
+    function regenerateAll() { if (!state.analysis) return; const selected = $("difficulty").value; state.beatmaps = {}; Object.keys(PROFILES).forEach(difficulty => { state.beatmaps[difficulty] = generateBeatmap(state.analysis, difficulty, state.settings, selected); }); $("settingsJson").value = JSON.stringify(exportableSettings(), null, 2); renderAll(); }
+
+    function setStatus(message, type) { $("status").textContent = message; $("status").className = "status" + (type ? " " + type : ""); }
+    function setProgress(value) { state.lastProgress = value; $("progressFill").style.width = Math.round(value * 100) + "%"; }
+    function makeWaveform(samples) { const count = 1200, waveform = []; for (let index = 0; index < count; index++) { const start = Math.floor(index / count * samples.length), end = Math.max(start + 1, Math.floor((index + 1) / count * samples.length)); let maximum = 0; for (let sample = start; sample < end; sample++) maximum = Math.max(maximum, Math.abs(samples[sample])); waveform.push(maximum); } return waveform; }
+    function handleAnalysis(analysis) { state.analysis = analysis; if (!analysis) { setStatus("분석할 수 없는 오디오입니다.", "error"); return; } setProgress(1); setStatus("분석 완료 · 파라미터 조정 가능", "good"); $("analysisMeta").textContent = analysis.duration.toFixed(2) + "s · " + Math.round(analysis.tempo) + " BPM · onset " + analysis.onsets.length + " · object " + analysis.musicalObjects.length; regenerateAll(); if (state.smokePending) { const normal = statsFor(state.beatmaps.normal, analysis.duration), passed = analysis.onsets.length > 0 && analysis.musicalObjects.length > 0 && normal.total > 0; $("smokeStatus").textContent = passed ? "합성 신호 스모크 테스트 PASS · tempo " + Math.round(analysis.tempo) + " BPM · normal notes " + normal.total : "합성 신호 스모크 테스트 FAIL · onset/object/note 결과를 확인하세요."; $("smokeStatus").className = passed ? "good" : "error"; state.smokePending = false; } }
+    function submitSamples(samples, duration, label) { if (!state.worker) state.worker = createWorker(); if (!state.worker) { setStatus("Web Worker를 사용할 수 없습니다.", "error"); return; } state.analysis = null; state.beatmaps = {}; state.waveform = makeWaveform(samples); setProgress(0); $("fileName").textContent = label; setStatus("FFT 분석 중…"); state.worker.postMessage({ type: "analyzeSamples", samples: samples.buffer, duration, settings: state.settings }, [samples.buffer]); }
+    async function decodeFile(file) { try { setStatus("오디오 디코드 중…"); setProgress(.05); if (!window.AudioContext && !window.webkitAudioContext) throw new Error("Web Audio API 없음"); const Context = window.AudioContext || window.webkitAudioContext, context = new Context(), decoded = await context.decodeAudioData(await file.arrayBuffer()), targetLength = Math.max(1, Math.ceil(decoded.duration * state.settings.sampleRate)); let mono; try { const offline = new OfflineAudioContext(1, targetLength, state.settings.sampleRate), source = offline.createBufferSource(); source.buffer = decoded; source.connect(offline.destination); source.start(0); mono = (await offline.startRendering()).getChannelData(0); } catch (error) { mono = new Float32Array(targetLength); for (let i = 0; i < targetLength; i++) { const sourceIndex = i / state.settings.sampleRate * decoded.sampleRate, lower = Math.floor(sourceIndex), fraction = sourceIndex - lower, values = []; for (let channel = 0; channel < decoded.numberOfChannels; channel++) { const data = decoded.getChannelData(channel); values.push((data[lower] || 0) * (1 - fraction) + (data[lower + 1] || 0) * fraction); } mono[i] = values.reduce((sum, value) => sum + value, 0) / values.length; } } await context.close(); setAudioSource(file); submitSamples(new Float32Array(mono), decoded.duration, file.name); } catch (error) { setStatus("오디오 디코드 실패: " + error.message, "error"); setProgress(0); } }
+    function setAudioSource(blob) { if (state.objectURL) URL.revokeObjectURL(state.objectURL); state.objectURL = URL.createObjectURL(blob); $("audio").src = state.objectURL; $("playButton").disabled = false; $("stopButton").disabled = false; }
+    function makeSyntheticSignal() { const sampleRate = state.settings.sampleRate, duration = 16, samples = new Float32Array(sampleRate * duration), beat = .5; let noiseState = 0x12345678; for (let i = 0; i < samples.length; i++) { const time = i / sampleRate, beatPosition = time % beat, eighthPosition = time % (beat / 2), kick = beatPosition < .12 ? Math.sin(Math.PI * 2 * (55 - 25 * beatPosition / .12) * beatPosition) * Math.exp(-beatPosition * 32) * .9 : 0; noiseState = (noiseState * 1664525 + 1013904223) >>> 0; const noise = noiseState / 4294967296 * 2 - 1, hat = eighthPosition < .025 ? noise * Math.exp(-eighthPosition * 110) * .18 : 0, melodyTime = time % 2, melody = Math.sin(Math.PI * 2 * 440 * time) * (melodyTime < 1.6 ? .17 : 0) + Math.sin(Math.PI * 2 * 554.37 * time) * (melodyTime >= 1.6 ? .14 : 0); samples[i] = Math.max(-1, Math.min(1, kick + hat + melody)); } return { samples, duration }; }
+    function writeWav(samples, sampleRate) { const buffer = new ArrayBuffer(44 + samples.length * 2), view = new DataView(buffer); const write = (offset, text) => [...text].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0))); write(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); write(8, "WAVE"); write(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); write(36, "data"); view.setUint32(40, samples.length * 2, true); samples.forEach((sample, index) => view.setInt16(44 + index * 2, Math.max(-1, Math.min(1, sample)) * 0x7fff, true)); return new Blob([buffer], { type: "audio/wav" }); }
+    function runSmokeTest() { const result = makeSyntheticSignal(); state.smokePending = true; submitSamples(result.samples, result.duration, "synthetic-120bpm.wav"); const blob = writeWav(result.samples, state.settings.sampleRate); setAudioSource(blob); $("smokeStatus").textContent = "합성 신호 실행 중… FFT → onset → MIR → note generation 결과를 확인하세요."; }
+
+    function updatePlayhead() { const audio = $("audio"), now = audio.currentTime || 0; if (state.analysis) { const width = Math.max(900, state.analysis.duration * 24); $("timelinePlayhead").style.left = Math.max(0, Math.min(width, now * width / state.analysis.duration)) + "px"; drawPreview(now); if (state.playing) { const scroll = $("timelineScroll"), left = now * width / state.analysis.duration; if (left > scroll.scrollLeft + scroll.clientWidth * .85) scroll.scrollLeft = Math.max(0, left - scroll.clientWidth * .25); } } if (state.playing) state.raf = requestAnimationFrame(updatePlayhead); }
+    function togglePlayback() { const audio = $("audio"); if (!audio.src) return; if (audio.paused) { audio.play().then(() => { state.playing = true; $("playButton").textContent = "Ⅱ 일시정지"; updatePlayhead(); }).catch(error => setStatus("재생 실패: " + error.message, "error")); } else { audio.pause(); state.playing = false; $("playButton").textContent = "▶ 재생"; cancelAnimationFrame(state.raf); } }
+    function stopPlayback() { const audio = $("audio"); audio.pause(); audio.currentTime = 0; state.playing = false; $("playButton").textContent = "▶ 재생"; cancelAnimationFrame(state.raf); updatePlayhead(); }
+
+    function bindControls() {
+      const analysisIDs = new Set(["onsetConfidenceThreshold", "bandLowThreshold", "bandMidThreshold", "bandHighThreshold", "minimumGap", "mergeWindow", "sectionBoundarySensitivity", "minimumSustainDuration", "sustainStabilityThreshold"]);
+      document.querySelectorAll("input[type=range]").forEach(input => input.addEventListener("input", () => { updateOutput(input.id); const id = input.id; if (id === "bandLowThreshold" || id === "bandMidThreshold" || id === "bandHighThreshold") state.settings.bandThresholds[id.slice(4, -9).toLowerCase()] = Number(input.value); else if (id.startsWith("lane")) state.settings.laneMappingWeights[id.slice(4).toLowerCase()] = Number(input.value); else state.settings[id] = Number(input.value); if (analysisIDs.has(id)) scheduleAnalysisRebuild(); else scheduleRegeneration(); }));
+      $("difficulty").addEventListener("change", () => { applyDifficultyDefaults(); scheduleRegeneration(); });
+      $("seed").addEventListener("input", () => { state.settings.seed = $("seed").value.replace(/\D/g, "") || "0"; scheduleRegeneration(); });
+      $("audioInput").addEventListener("change", event => { const file = event.target.files[0]; if (file) decodeFile(file); });
+      ["playButton", "stopButton", "synthButton"].forEach(id => $(id).addEventListener("click", id === "playButton" ? togglePlayback : id === "stopButton" ? stopPlayback : runSmokeTest));
+      $("audio").addEventListener("ended", () => { state.playing = false; $("playButton").textContent = "▶ 재생"; cancelAnimationFrame(state.raf); });
+      const dropZone = $("dropZone"); ["dragenter", "dragover"].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.add("over"); })); ["dragleave", "drop"].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.remove("over"); })); dropZone.addEventListener("drop", event => { const file = event.dataTransfer.files[0]; if (file) decodeFile(file); });
+      $("exportButton").addEventListener("click", async () => { const text = JSON.stringify(exportableSettings(), null, 2); $("settingsJson").value = text; try { await navigator.clipboard.writeText(text); setStatus("설정 JSON을 클립보드에 복사했습니다.", "good"); } catch { $("settingsJson").focus(); $("settingsJson").select(); setStatus("JSON을 선택했습니다. 직접 복사하세요."); } });
+      $("importButton").addEventListener("click", () => { try { const incoming = JSON.parse($("settingsJson").value); state.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), incoming, { bandThresholds: Object.assign({}, DEFAULT_SETTINGS.bandThresholds, incoming.bandThresholds), layerImportanceWeights: Object.assign({}, DEFAULT_SETTINGS.layerImportanceWeights, incoming.layerImportanceWeights), laneMappingWeights: Object.assign({}, DEFAULT_SETTINGS.laneMappingWeights, incoming.laneMappingWeights) }); state.settings.maxSimultaneous = 2; syncControlsFromSettings(); if (state.analysis && Object.keys(incoming).some(key => ["onsetConfidenceThreshold", "bandThresholds", "minimumGap", "mergeWindow", "sectionBoundarySensitivity", "minimumSustainDuration", "sustainStabilityThreshold"].includes(key))) scheduleAnalysisRebuild(); else scheduleRegeneration(); setStatus("설정을 적용했습니다.", "good"); } catch (error) { setStatus("JSON 적용 실패: " + error.message, "error"); } });
+      window.addEventListener("resize", renderAll);
+    }
+
+    function init() { state.worker = createWorker(); if (state.worker) state.worker.onmessage = event => { const message = event.data; if (message.type === "progress") setProgress(message.value); if (message.type === "analysis") handleAnalysis(message.analysis); }; syncControlsFromSettings(); bindControls(); renderAll(); }
+    init();
+  </script>
+</body>
+</html>

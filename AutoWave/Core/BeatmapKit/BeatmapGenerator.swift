@@ -1,7 +1,7 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 7
+    static let version = 8
     static let minimumPlayableNoteTime: TimeInterval = 3
     private static let minimumSequentialGap: TimeInterval = 0.09
     private static let dragSpanPadding: TimeInterval = 0.15

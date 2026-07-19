@@ -50,7 +50,7 @@ enum AnalysisResultCodingError: Error, Sendable, Equatable {
 }
 
 struct AnalysisResult: Codable, Sendable, Equatable {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var schemaVersion: Int
     var duration: TimeInterval
