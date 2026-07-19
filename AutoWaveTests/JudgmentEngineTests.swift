@@ -163,6 +163,16 @@ final class JudgmentEngineTests: XCTestCase {
         XCTAssertEqual(engine.score, 24)
     }
 
+    func testDragHeadWithinBadWindowNeverAwardsBad() {
+        let drag = drag(at: 1.0, duration: 0.5, lane: 1.0)
+        let engine = JudgmentEngine(notes: [drag])
+
+        XCTAssertEqual(
+            engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.150),
+            JudgmentResult(judgment: .good, pointsAwarded: 2, combo: 0, score: 2)
+        )
+    }
+
     func testHeldDragFinishesAtEndWithoutRetapOrMiss() {
         let drag = drag(at: 1.0, duration: 0.5, lane: 1.0)
         let engine = JudgmentEngine(notes: [drag])
@@ -182,17 +192,46 @@ final class JudgmentEngineTests: XCTestCase {
         XCTAssertEqual(engine.judgmentCounts.miss, 0)
     }
 
-    func testDragTickToleranceIncludesExactlyEightTenthsAndBreaksPastIt() {
+    func testDragTickUsesExpandedBaseToleranceAndGraceBeforeBreaking() {
         let drag = drag(at: 1.0, duration: 1.0, lane: 1.0)
         let engine = JudgmentEngine(notes: [drag])
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.8, at: 1.1),
+            engine.dragTick(noteID: drag.id, touchLane: 2.1, at: 1.1),
             .scored(points: 3, combo: 2)
         )
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.81, at: 1.2),
+            engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.2),
+            .scored(points: 4, combo: 3)
+        )
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.44),
+            .scored(points: 5, combo: 4)
+        )
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.451),
+            .broken
+        )
+    }
+
+    func testDragTickGraceResetsWhenFingerReturnsWithinTolerance() {
+        let drag = drag(at: 1.0, duration: 1.0, lane: 1.0)
+        let engine = JudgmentEngine(notes: [drag])
+        _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
+
+        _ = engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.1)
+        _ = engine.dragTick(noteID: drag.id, touchLane: 1.0, at: 1.2)
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.3),
+            .scored(points: 5, combo: 4)
+        )
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.55),
+            .scored(points: 6, combo: 5)
+        )
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.11, at: 1.551),
             .broken
         )
     }
@@ -203,7 +242,11 @@ final class JudgmentEngineTests: XCTestCase {
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.81, at: 1.1),
+            engine.dragTick(noteID: drag.id, touchLane: 2.12, at: 1.1),
+            .scored(points: 3, combo: 2)
+        )
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.12, at: 1.36),
             .broken
         )
         let scoreAfterBreak = engine.score
@@ -244,20 +287,20 @@ final class JudgmentEngineTests: XCTestCase {
             at: 1.0,
             duration: 1.0,
             lane: 1.0,
-            lanePath: [LaneKeyframe(offset: 0.8, lane: 3.0)]
+            lanePath: [LaneKeyframe(offset: 0.8, lane: 2.0)]
         )
         let engine = JudgmentEngine(notes: [drag])
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.5),
-            .broken
+            engine.dragTick(noteID: drag.id, touchLane: 2.4, at: 1.7),
+            .scored(points: 3, combo: 2)
         )
 
         let transitionEngine = JudgmentEngine(notes: [drag])
         _ = transitionEngine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
         XCTAssertEqual(
-            transitionEngine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.7),
+            transitionEngine.dragTick(noteID: drag.id, touchLane: 2.4, at: 1.7),
             .scored(points: 3, combo: 2)
         )
         XCTAssertEqual(
@@ -265,8 +308,12 @@ final class JudgmentEngineTests: XCTestCase {
             .scored(points: 4, combo: 3)
         )
         XCTAssertEqual(
-            transitionEngine.dragTick(noteID: drag.id, touchLane: 2.0, at: 1.96),
-            .broken
+            transitionEngine.dragTick(noteID: drag.id, touchLane: 3.2, at: 1.96),
+            .scored(points: 5, combo: 4)
+        )
+        XCTAssertEqual(
+            transitionEngine.dragTick(noteID: drag.id, touchLane: 3.2, at: 2.0),
+            .finished
         )
     }
 
@@ -275,13 +322,13 @@ final class JudgmentEngineTests: XCTestCase {
             at: 1.0,
             duration: 1.0,
             lane: 1.0,
-            lanePath: [LaneKeyframe(offset: 0.8, lane: 3.0)]
+            lanePath: [LaneKeyframe(offset: 0.8, lane: 2.0)]
         )
         let engine = JudgmentEngine(notes: [drag])
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.8, at: 1.5),
+            engine.dragTick(noteID: drag.id, touchLane: 2.2, at: 1.5),
             .scored(points: 3, combo: 2)
         )
     }
@@ -292,7 +339,11 @@ final class JudgmentEngineTests: XCTestCase {
         _ = engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.0)
 
         XCTAssertEqual(
-            engine.dragTick(noteID: drag.id, touchLane: 1.81, at: 1.1),
+            engine.dragTick(noteID: drag.id, touchLane: 2.12, at: 1.1),
+            .scored(points: 3, combo: 2)
+        )
+        XCTAssertEqual(
+            engine.dragTick(noteID: drag.id, touchLane: 2.12, at: 1.36),
             .broken
         )
         XCTAssertEqual(engine.advance(to: 2.0), [])

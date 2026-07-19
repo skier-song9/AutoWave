@@ -8,7 +8,7 @@ import XCTest
 final class AnalysisViewModelTests: XCTestCase {
     func testGeneratorVersionFourEntityRequiresAutomaticRegeneration() throws {
         XCTAssertTrue(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [4]))
-        XCTAssertFalse(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [5, 5, 5, 5, 5]))
+        XCTAssertFalse(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [6, 6, 6, 6, 6]))
 
         let track = TrackEntity(
             title: "버전 테스트",

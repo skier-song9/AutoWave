@@ -410,7 +410,7 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
 
         XCTAssertEqual(beatmap.themeID, "neonRush")
-        XCTAssertEqual(beatmap.generatorVersion, 5)
+        XCTAssertEqual(beatmap.generatorVersion, 6)
         XCTAssertEqual(beatmap.palette, beatmapThemePalette(for: GameTheme.presets[1]))
     }
 
@@ -418,6 +418,39 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: makeBusyAnalysis(), difficulty: .hell, seed: 42)
 
         XCTAssertTrue(beatmap.notes.contains { $0.kind == .drag && !$0.lanePath.isEmpty })
+    }
+
+    func testMovingDragKeyframesShiftOneLaneAndStaySpaced() {
+        let analysis = makeBusyAnalysis()
+
+        for difficulty in Difficulty.allCases {
+            for seed in 0..<10 {
+                let beatmap = BeatmapGenerator.generate(
+                    from: analysis,
+                    difficulty: difficulty,
+                    seed: UInt64(seed)
+                )
+
+                for note in beatmap.notes where note.kind == .drag && !note.lanePath.isEmpty {
+                    var previousLane = note.lane
+                    var previousOffset = 0.0
+                    for keyframe in note.lanePath {
+                        XCTAssertLessThanOrEqual(
+                            abs(keyframe.lane - previousLane),
+                            1.0 + 1e-9,
+                            "(difficulty) seed (seed) has a multi-lane step"
+                        )
+                        XCTAssertGreaterThanOrEqual(
+                            keyframe.offset - previousOffset,
+                            0.3 - 1e-9,
+                            "(difficulty) seed (seed) has a short drag step"
+                        )
+                        previousLane = keyframe.lane
+                        previousOffset = keyframe.offset
+                    }
+                }
+            }
+        }
     }
 
     func testHellHasChordsAndMoreNotesThanHardByMeaningfulRatio() {

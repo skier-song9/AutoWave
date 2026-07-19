@@ -1,3 +1,4 @@
+import AVFoundation
 import SpriteKit
 import XCTest
 @testable import AutoWave
@@ -56,6 +57,64 @@ final class GameplayStabilityTests: XCTestCase {
         XCTAssertTrue(scene.view?.isMultipleTouchEnabled == true)
     }
 
+    func testNoteSpeedMultiplierCyclesThroughPersistedValues() {
+        let values = [0.5, 0.75, 1.0, 1.5]
+
+        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[0]), values[1])
+        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[1]), values[2])
+        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[2]), values[3])
+        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[3]), values[0])
+    }
+
+    func testSceneAppliesUpdatedNoteSpeedMultiplierOnNextFrame() {
+        let speedState = NoteSpeedMultiplierState(1.0)
+        let scene = makeScene(
+            beatmap: makeBeatmap(notes: []),
+            noteSpeedMultiplier: { speedState.value },
+            playbackTime: { 0 },
+            audioDuration: 10
+        )
+        let renderQueue = DispatchQueue(label: "GameplayStabilityTests.speed")
+
+        XCTAssertEqual(scene.effectiveScrollSpeed, 360, accuracy: 0.001)
+        speedState.set(1.5)
+        renderQueue.sync { scene.update(0.1) }
+
+        XCTAssertEqual(scene.effectiveScrollSpeed, 540, accuracy: 0.001)
+    }
+
+    func testManualStopCompletionCannotFinishClockAcrossResume() {
+        let clock = PlaybackClock(playerNode: AVAudioPlayerNode())
+        let initialGeneration = clock.beginPlayback()
+
+        clock.beginManualStop()
+        clock.completePlayback(for: initialGeneration)
+        XCTAssertFalse(clock.isFinished)
+
+        let resumedGeneration = clock.beginPlayback()
+        clock.completePlayback(for: initialGeneration)
+        XCTAssertFalse(clock.isFinished)
+
+        clock.completePlayback(for: resumedGeneration)
+        XCTAssertTrue(clock.isFinished)
+    }
+
+    func testPausedSceneIgnoresFinishedPlayback() {
+        var completed = false
+        let scene = makeScene(
+            beatmap: makeBeatmap(notes: []),
+            playbackTime: { 12 },
+            playbackFinished: { true },
+            audioDuration: 10,
+            onComplete: { _ in completed = true }
+        )
+        let renderQueue = DispatchQueue(label: "GameplayStabilityTests.pausedCompletion")
+        scene.isPaused = true
+        renderQueue.sync { scene.update(12) }
+
+        XCTAssertFalse(completed)
+    }
+
     func testCompletionUsesAudioDurationFallbackWhenPlaybackCallbackStalls() {
         var completed = false
         let scene = makeScene(
@@ -108,6 +167,7 @@ final class GameplayStabilityTests: XCTestCase {
 
     private func makeScene(
         beatmap: Beatmap,
+        noteSpeedMultiplier: @escaping @Sendable () -> CGFloat = { 1 },
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool = { false },
         audioDuration: TimeInterval,
@@ -118,6 +178,7 @@ final class GameplayStabilityTests: XCTestCase {
             difficulty: .normal,
             judgmentEngine: JudgmentEngine(notes: beatmap.notes),
             visualizerTap: VisualizerTap(),
+            noteSpeedMultiplier: noteSpeedMultiplier,
             playbackTime: playbackTime,
             playbackFinished: playbackFinished,
             audioDuration: audioDuration,

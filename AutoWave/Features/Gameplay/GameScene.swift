@@ -130,7 +130,6 @@ final class GameScene: SKScene, @unchecked Sendable {
         private let remainingBand = SKShapeNode()
         private let remainingCore = SKShapeNode()
         private let headCap = SKShapeNode()
-        private let tailCap = SKShapeNode()
         private let crest = SKShapeNode()
         private let cropNode = SKCropNode()
         private let cropMask = SKShapeNode()
@@ -172,11 +171,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             headCap.lineWidth = 2
             headCap.zPosition = 2
 
-            tailCap.fillColor = capColor
-            tailCap.strokeColor = capStrokeColor
-            tailCap.lineWidth = 2
-            tailCap.zPosition = 2
-
             crest.fillColor = bodyColor
             crest.strokeColor = .clear
             crest.glowWidth = 8
@@ -193,7 +187,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             cropNode.addChild(remainingBand)
             cropNode.addChild(remainingCore)
             cropNode.addChild(headCap)
-            cropNode.addChild(tailCap)
             cropNode.addChild(crest)
             addChild(cropNode)
             zPosition = 1.5
@@ -235,7 +228,6 @@ final class GameScene: SKScene, @unchecked Sendable {
                 transform: nil
             )
             headCap.path = capPath
-            tailCap.path = capPath
             crest.path = CGPath(
                 roundedRect: CGRect(
                     x: -laneWidth * 0.225,
@@ -286,8 +278,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             state = .broken
             fingerOn = false
             breakOffset = min(max(time - note.time, 0), note.duration)
-            tailCap.fillColor = inactiveBandColor
-            tailCap.strokeColor = inactiveCoreColor
             cropMask.position.y = 0
             cropNode.isHidden = false
             applyPaths()
@@ -298,7 +288,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             state = .finished
             fingerOn = false
             headCap.isHidden = true
-            tailCap.isHidden = true
             band.isHidden = true
             core.isHidden = true
             completedBand.isHidden = true
@@ -318,8 +307,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             core.strokeColor = inactiveCoreColor
             headCap.fillColor = inactiveBandColor
             headCap.strokeColor = inactiveCoreColor
-            tailCap.fillColor = inactiveBandColor
-            tailCap.strokeColor = inactiveCoreColor
             cropMask.position.y = 0
             cropNode.isHidden = false
             crest.isHidden = true
@@ -408,9 +395,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             remainingBand.isHidden = true
             remainingCore.isHidden = true
             headCap.position = spinePoints.first?.point ?? .zero
-            tailCap.position = spinePoints.last?.point ?? .zero
             headCap.isHidden = state == .active || state == .finished
-            tailCap.isHidden = state == .finished
 
             guard state == .broken, let breakOffset else {
                 return
@@ -480,17 +465,17 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         private func laneTolerance(at elapsed: TimeInterval) -> Double {
-            guard !note.lanePath.isEmpty else { return 0.8 }
+            guard !note.lanePath.isEmpty else { return 1.1 }
 
             for keyframe in note.lanePath {
                 let offset = max(keyframe.offset, 0)
                 guard offset > 0, offset < note.duration else { continue }
                 if abs(elapsed - offset) <= 0.15 {
-                    return 1.0
+                    return 1.5
                 }
             }
 
-            return 0.8
+            return 1.1
         }
     }
 
@@ -611,6 +596,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let rippleColor: SKColor
     private let judgmentAccentColor: SKColor
     private let scrollSpeed: CGFloat
+    private let noteSpeedMultiplier: @Sendable () -> CGFloat
     private let laneCount: Int
     private let completionFallbackTime: TimeInterval
 
@@ -683,7 +669,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         difficulty: Difficulty,
         judgmentEngine: JudgmentEngine,
         visualizerTap: VisualizerTap,
-        noteSpeedMultiplier: CGFloat = 1,
+        noteSpeedMultiplier: @escaping @Sendable () -> CGFloat = { 1 },
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool,
         audioDuration: TimeInterval,
@@ -707,7 +693,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         rippleColor = makeColor(for: selectedTheme.ripple)
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
-        scrollSpeedMultiplier = min(max(noteSpeedMultiplier, 0.5), 1.5)
+        self.noteSpeedMultiplier = noteSpeedMultiplier
+        scrollSpeedMultiplier = min(max(noteSpeedMultiplier(), 0.5), 1.5)
         laneCount = min(max(beatmap.laneCount, 4), 7)
         let lastNoteTime = beatmap.notes.reduce(0) { max($0, $1.time) }
         completionFallbackTime = max(audioDuration, lastNoteTime) + 2
@@ -946,7 +933,9 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        guard !hasCompleted else { return }
+        guard !hasCompleted, !isPaused else { return }
+
+        refreshNoteSpeedMultiplier()
 
         let delta = frameDelta(at: currentTime)
         if isGameOverPending {
@@ -1076,8 +1065,16 @@ final class GameScene: SKScene, @unchecked Sendable {
         updateEndedDragTouch(in: touches)
     }
 
-    func setScrollSpeedMultiplier(_ multiplier: CGFloat) {
-        scrollSpeedMultiplier = min(max(multiplier, 0.5), 1.5)
+    var effectiveScrollSpeed: CGFloat {
+        currentScrollSpeed
+    }
+
+    private func refreshNoteSpeedMultiplier() {
+        let multiplier = min(max(noteSpeedMultiplier(), 0.5), 1.5)
+        guard abs(multiplier - scrollSpeedMultiplier) > 0.000_001 else { return }
+
+        scrollSpeedMultiplier = multiplier
+        guard laneWidth > 0 else { return }
         for node in ribbonNodes {
             node.updateLayout(
                 laneOriginX: laneAreaRect.minX,

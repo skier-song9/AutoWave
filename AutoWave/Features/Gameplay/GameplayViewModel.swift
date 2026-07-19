@@ -17,6 +17,8 @@ final class PlaybackClock: @unchecked Sendable {
     private weak var playerNode: AVAudioPlayerNode?
     private var offset: TimeInterval = 0
     private var finished = false
+    private var completionGeneration: UInt64 = 0
+    private var suppressCompletion = false
     private var lock = os_unfair_lock_s()
 
     init(playerNode: AVAudioPlayerNode) {
@@ -56,6 +58,54 @@ final class PlaybackClock: @unchecked Sendable {
         }
     }
 
+    func beginPlayback() -> UInt64 {
+        withLock {
+            completionGeneration &+= 1
+            suppressCompletion = false
+            finished = false
+            return completionGeneration
+        }
+    }
+
+    func beginManualStop() {
+        withLock {
+            completionGeneration &+= 1
+            suppressCompletion = true
+        }
+    }
+
+    func completePlayback(for generation: UInt64) {
+        withLock {
+            guard !suppressCompletion, generation == completionGeneration else { return }
+            finished = true
+        }
+    }
+
+    private func withLock<T>(_ body: () -> T) -> T {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return body()
+    }
+}
+
+final class NoteSpeedMultiplierState: @unchecked Sendable {
+    private var storedValue: CGFloat
+    private var lock = os_unfair_lock_s()
+
+    init(_ value: CGFloat = 1) {
+        storedValue = value
+    }
+
+    var value: CGFloat {
+        withLock { storedValue }
+    }
+
+    func set(_ value: CGFloat) {
+        withLock {
+            storedValue = value
+        }
+    }
+
     private func withLock<T>(_ body: () -> T) -> T {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
@@ -92,6 +142,7 @@ final class GameplayViewModel {
     @ObservationIgnored private var visualizerTap: VisualizerTap?
     @ObservationIgnored private var gameplayScene: GameScene?
     @ObservationIgnored private var playbackClock: PlaybackClock?
+    @ObservationIgnored private let noteSpeedState = NoteSpeedMultiplierState()
     @ObservationIgnored private var hasCompleted = false
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
     @ObservationIgnored private var perfectHaptic: UIImpactFeedbackGenerator?
@@ -141,8 +192,13 @@ final class GameplayViewModel {
                 format: newAudioFile.processingFormat
             )
             let clock = PlaybackClock(playerNode: newPlayerNode)
-            newPlayerNode.scheduleFile(newAudioFile, at: nil) { @Sendable [clock] in
-                clock.setFinished(true)
+            let generation = clock.beginPlayback()
+            newPlayerNode.scheduleFile(
+                newAudioFile,
+                at: nil,
+                completionCallbackType: .dataPlayedBack
+            ) { @Sendable [clock] _ in
+                clock.completePlayback(for: generation)
             }
             try newAudioEngine.start()
             let newVisualizerTap = VisualizerTap()
@@ -161,12 +217,14 @@ final class GameplayViewModel {
             countdown = nil
             saveErrorMessage = nil
             noteSpeedMultiplier = speedMultiplier
+            noteSpeedState.set(CGFloat(speedMultiplier))
+            let speedState = noteSpeedState
             gameplayScene = GameScene(
                 beatmap: decodedBeatmap,
                 difficulty: difficulty,
                 judgmentEngine: judgmentEngine,
                 visualizerTap: newVisualizerTap,
-                noteSpeedMultiplier: CGFloat(speedMultiplier),
+                noteSpeedMultiplier: { speedState.value },
                 playbackTime: {
                     clock.currentTime
                 },
@@ -204,16 +262,23 @@ final class GameplayViewModel {
     func cycleNoteSpeedMultiplier(in context: ModelContext) {
         guard state == .ready else { return }
 
-        let currentIndex = Self.noteSpeedMultipliers.firstIndex {
-            abs($0 - noteSpeedMultiplier) < 0.000_001
+        updateNoteSpeedMultiplier(
+            Self.nextNoteSpeedMultiplier(after: noteSpeedMultiplier),
+            in: context
+        )
+    }
+
+    static func nextNoteSpeedMultiplier(after current: Double) -> Double {
+        let currentIndex = noteSpeedMultipliers.firstIndex {
+            abs($0 - current) < 0.000_001
         } ?? 2
-        let nextIndex = (currentIndex + 1) % Self.noteSpeedMultipliers.count
-        updateNoteSpeedMultiplier(Self.noteSpeedMultipliers[nextIndex], in: context)
+        let nextIndex = (currentIndex + 1) % noteSpeedMultipliers.count
+        return noteSpeedMultipliers[nextIndex]
     }
 
     private func updateNoteSpeedMultiplier(_ multiplier: Double, in context: ModelContext) {
         noteSpeedMultiplier = multiplier
-        gameplayScene?.setScrollSpeedMultiplier(CGFloat(multiplier))
+        noteSpeedState.set(CGFloat(multiplier))
 
         let profile = ProfileEntity.current(in: context)
         profile.noteSpeedMultiplier = multiplier
@@ -232,10 +297,11 @@ final class GameplayViewModel {
         countdown = nil
         let offset = playbackClock?.currentTime ?? 0
         playbackClock?.setOffset(offset)
+        isPaused = true
+        gameplayScene?.isPaused = true
+        playbackClock?.beginManualStop()
         playerNode?.stop()
         audioEngine?.pause()
-        gameplayScene?.isPaused = true
-        isPaused = true
     }
 
     func resume() {
@@ -266,6 +332,7 @@ final class GameplayViewModel {
         isPaused = false
         gameplayScene?.isPaused = false
         visualizerTap?.detach()
+        playbackClock?.beginManualStop()
         playerNode?.stop()
         audioEngine?.stop()
         audioFile = nil
@@ -304,14 +371,15 @@ final class GameplayViewModel {
             return
         }
 
-        playbackClock.setFinished(false)
+        let generation = playbackClock.beginPlayback()
         playerNode.scheduleSegment(
             audioFile,
             startingFrame: startingFrame,
             frameCount: AVAudioFrameCount(remainingFrames),
-            at: nil
-        ) { @Sendable [playbackClock] in
-            playbackClock.setFinished(true)
+            at: nil,
+            completionCallbackType: .dataPlayedBack
+        ) { @Sendable [playbackClock] _ in
+            playbackClock.completePlayback(for: generation)
         }
 
         do {

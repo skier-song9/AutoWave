@@ -48,6 +48,7 @@ final class JudgmentEngine: @unchecked Sendable {
     private struct DragState {
         let note: Note
         var lifecycle: DragLifecycle = .pending
+        var outOfToleranceSince: TimeInterval?
     }
 
     private enum Window {
@@ -56,9 +57,10 @@ final class JudgmentEngine: @unchecked Sendable {
         static let good: TimeInterval = 0.115
         static let bad: TimeInterval = 0.150
         static let comparisonEpsilon: TimeInterval = 0.000_000_001
-        static let dragLaneTolerance = 0.8
-        static let dragTransitionTolerance = 1.0
+        static let dragLaneTolerance = 1.1
+        static let dragTransitionTolerance = 1.5
         static let dragTransitionWindow: TimeInterval = 0.15
+        static let dragTickGrace: TimeInterval = 0.25
     }
 
     private var pendingNotes: [PendingNote]
@@ -80,7 +82,7 @@ final class JudgmentEngine: @unchecked Sendable {
         dragStates = notes
             .filter { $0.kind == .drag }
             .sorted { $0.time < $1.time }
-            .map { DragState(note: $0) }
+            .map { DragState(note: $0, outOfToleranceSince: nil) }
     }
 
     @discardableResult
@@ -118,8 +120,9 @@ final class JudgmentEngine: @unchecked Sendable {
             return nil
         }
 
-        let result = award(judgment: judgment(for: timeOffset))
+        let result = award(judgment: dragHeadJudgment(for: timeOffset))
         dragStates[index].lifecycle = .active
+        dragStates[index].outOfToleranceSince = nil
         return result
     }
 
@@ -144,11 +147,19 @@ final class JudgmentEngine: @unchecked Sendable {
 
         let elapsed = max(time - note.time, 0)
         let spineLane = lane(at: elapsed, for: note)
-        guard abs(touchLane - spineLane) <= dragLaneTolerance(
+        let withinTolerance = abs(touchLane - spineLane) <= dragLaneTolerance(
             at: elapsed,
             for: note
-        ) + Window.comparisonEpsilon else {
-            return breakDrag(at: index)
+        ) + Window.comparisonEpsilon
+        if withinTolerance {
+            dragStates[index].outOfToleranceSince = nil
+        } else if let outOfToleranceSince = dragStates[index].outOfToleranceSince {
+            let outOfToleranceDuration = max(time - outOfToleranceSince, 0)
+            guard outOfToleranceDuration <= Window.dragTickGrace + Window.comparisonEpsilon else {
+                return breakDrag(at: index)
+            }
+        } else {
+            dragStates[index].outOfToleranceSince = time
         }
 
         combo += 1
@@ -239,6 +250,7 @@ final class JudgmentEngine: @unchecked Sendable {
 
     private func breakDrag(at index: Int) -> DragTickResult {
         dragStates[index].lifecycle = .broken
+        dragStates[index].outOfToleranceSince = nil
         _ = recordMiss()
         return .broken
     }
@@ -254,6 +266,11 @@ final class JudgmentEngine: @unchecked Sendable {
             return .good
         }
         return .bad
+    }
+
+    private func dragHeadJudgment(for offset: TimeInterval) -> Judgment {
+        let judgment = judgment(for: offset)
+        return judgment == .bad ? .good : judgment
     }
 
     private func dragStateIndex(for noteID: UUID) -> Int? {

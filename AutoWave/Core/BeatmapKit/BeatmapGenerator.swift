@@ -1,10 +1,11 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 5
+    static let version = 6
     static let minimumPlayableNoteTime: TimeInterval = 3
     private static let minimumSequentialGap: TimeInterval = 0.09
     private static let dragSpanPadding: TimeInterval = 0.15
+    private static let minimumLaneStepInterval: TimeInterval = 0.35
 
     static func generate(from analysis: AnalysisResult, difficulty: Difficulty, seed: UInt64) -> Beatmap {
         let profile = DifficultyProfile.profile(for: difficulty)
@@ -724,24 +725,36 @@ enum BeatmapGenerator {
         difficulty: Difficulty,
         rng: inout SplitMix64
     ) -> [LaneKeyframe] {
-        let count = 2 + rng.nextInt(upperBound: 3)
-        let maximumDistance = min(3, laneCount - 1)
-        let minimumDistance = difficulty == .hell ? min(2, maximumDistance) : 1
-        let distance = minimumDistance + rng.nextInt(upperBound: maximumDistance - minimumDistance + 1)
-        let direction: Int
-        if startLane < distance {
-            direction = 1
-        } else if startLane + distance >= laneCount {
-            direction = -1
-        } else {
-            direction = rng.nextDouble() < 0.5 ? -1 : 1
-        }
-        let targetLane = min(laneCount - 1, max(0, startLane + direction * distance))
+        let maximumDistance = min(
+            3,
+            max(startLane, laneCount - 1 - startLane)
+        )
+        let maximumSteps = min(
+            maximumDistance,
+            Int((duration / minimumLaneStepInterval + 1e-9).rounded(.down))
+        )
+        guard maximumSteps > 0 else { return [] }
 
-        return (0..<count).map { index in
-            let fraction = Double(index) / Double(count - 1)
-            let lane = Double(startLane) + Double(targetLane - startLane) * fraction
-            return LaneKeyframe(offset: duration * fraction, lane: lane.rounded())
+        let minimumDistance = min(
+            difficulty == .hell ? min(2, maximumDistance) : 1,
+            maximumSteps
+        )
+        let distance = minimumDistance + rng.nextInt(upperBound: maximumSteps - minimumDistance + 1)
+        let canMoveRight = startLane + distance < laneCount
+        let canMoveLeft = startLane - distance >= 0
+        let direction: Int
+        if canMoveRight && canMoveLeft {
+            direction = rng.nextDouble() < 0.5 ? -1 : 1
+        } else if canMoveRight {
+            direction = 1
+        } else {
+            direction = -1
+        }
+        return (1...distance).map { step in
+            LaneKeyframe(
+                offset: duration * Double(step) / Double(distance),
+                lane: Double(startLane + direction * step)
+            )
         }
     }
 

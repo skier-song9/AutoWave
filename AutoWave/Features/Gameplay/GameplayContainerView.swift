@@ -76,9 +76,14 @@ private struct InteractivePopGestureBlocker: UIViewControllerRepresentable {
     }
 
     final class Controller: UIViewController {
+        override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge {
+            [.bottom]
+        }
+
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
             setInteractivePopGestureEnabled(false)
+            parent?.setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
         }
 
         override func viewWillDisappear(_ animated: Bool) {
@@ -176,23 +181,25 @@ private struct GameplaySessionView: View {
     @ViewBuilder
     private var gameplayContent: some View {
         if let scene = viewModel.scene {
-            SpriteView(scene: scene, options: [.ignoresSiblingOrder])
-                .overlay(alignment: .topTrailing) {
-                    if !isPauseMenuPresented && !viewModel.isPaused {
-                        VStack(alignment: .trailing, spacing: 8) {
-                            speedControl
-                            pauseButton
-                        }
-                        .padding(.top, 18)
-                        .padding(.trailing, 18)
-                        .zIndex(20)
+            ZStack(alignment: .topTrailing) {
+                SpriteView(scene: scene, options: [.ignoresSiblingOrder])
+
+                if !isPauseMenuPresented && !viewModel.isPaused {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        speedControl
+                        pauseButton
                     }
+                    .padding(.top, 18)
+                    .padding(.trailing, 18)
+                    .zIndex(20)
+                    .allowsHitTesting(true)
                 }
-                .overlay {
-                    if isPauseMenuPresented || viewModel.isPaused {
-                        pauseOverlay
-                    }
+            }
+            .overlay {
+                if isPauseMenuPresented || viewModel.isPaused {
+                    pauseOverlay
                 }
+            }
             .background(InteractivePopGestureBlocker().allowsHitTesting(false))
         } else {
             Color.black
@@ -266,9 +273,7 @@ private struct GameplaySessionView: View {
     private func pauseGame() {
         guard viewModel.state == .ready else { return }
         viewModel.pause()
-        if viewModel.isPaused {
-            isPauseMenuPresented = true
-        }
+        isPauseMenuPresented = viewModel.isPaused
     }
 
     private func speedLabel(_ value: CGFloat) -> String {
