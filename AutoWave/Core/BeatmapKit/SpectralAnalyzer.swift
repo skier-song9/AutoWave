@@ -11,6 +11,9 @@ struct SpectralFrame: Sendable {
     var lowFlux: Float
     var midFlux: Float
     var highFlux: Float
+    var dominantFrequency: Float
+    var pitchConfidence: Float
+    var spectralFlatness: Float
 
     init(
         flux: Float,
@@ -21,7 +24,10 @@ struct SpectralFrame: Sendable {
         rms: Float,
         lowFlux: Float = 0,
         midFlux: Float = 0,
-        highFlux: Float = 0
+        highFlux: Float = 0,
+        dominantFrequency: Float = 0,
+        pitchConfidence: Float = 0,
+        spectralFlatness: Float = 1
     ) {
         self.flux = flux
         self.bass = bass
@@ -32,6 +38,9 @@ struct SpectralFrame: Sendable {
         self.lowFlux = lowFlux
         self.midFlux = midFlux
         self.highFlux = highFlux
+        self.dominantFrequency = dominantFrequency
+        self.pitchConfidence = pitchConfidence
+        self.spectralFlatness = spectralFlatness
     }
 }
 
@@ -158,6 +167,9 @@ enum SpectralAnalyzer {
                                         var highFlux: Float = 0
                                         var totalMagnitude: Float = 0
                                         var weightedMagnitude: Float = 0
+                                        var logMagnitudeSum: Float = 0
+                                        var dominantBin = 0
+                                        var dominantMagnitude: Float = 0
                                         var bassEnergy: Float = 0
                                         var midEnergy: Float = 0
                                         var trebleEnergy: Float = 0
@@ -169,6 +181,11 @@ enum SpectralAnalyzer {
                                                 realValue * realValue + imaginaryValue * imaginaryValue
                                             )
                                             magnitudePointer[bin] = magnitude
+                                            if magnitude > dominantMagnitude {
+                                                dominantMagnitude = magnitude
+                                                dominantBin = bin
+                                            }
+                                            logMagnitudeSum += logf(max(magnitude, 0.000001))
                                             let lowerBin = max(1, bin - 2)
                                             let upperBin = min(halfSpectrumCount - 1, bin + 2)
                                             var maximumPreviousMagnitude: Float = 0
@@ -222,7 +239,18 @@ enum SpectralAnalyzer {
                                                 rms: sqrtf(rmsSum / Float(fftSize)),
                                                 lowFlux: lowFlux,
                                                 midFlux: midFlux,
-                                                highFlux: highFlux
+                                                highFlux: highFlux,
+                                                dominantFrequency: Float(dominantBin) * Float(sampleRate) / Float(fftSize),
+                                                pitchConfidence: pitchConfidence(
+                                                    totalMagnitude: totalMagnitude,
+                                                    logMagnitudeSum: logMagnitudeSum,
+                                                    binCount: halfSpectrumCount - 1
+                                                ),
+                                                spectralFlatness: spectralFlatness(
+                                                    totalMagnitude: totalMagnitude,
+                                                    logMagnitudeSum: logMagnitudeSum,
+                                                    binCount: halfSpectrumCount - 1
+                                                )
                                             )
                                         )
                                         progress?(Double(frameIndex + 1) / Double(frameCount))
@@ -235,5 +263,28 @@ enum SpectralAnalyzer {
             }
 
         return SpectralAnalysis(frames: frames)
+    }
+
+    private static func spectralFlatness(
+        totalMagnitude: Float,
+        logMagnitudeSum: Float,
+        binCount: Int
+    ) -> Float {
+        guard totalMagnitude > 0, binCount > 0 else { return 1 }
+        let arithmetic = totalMagnitude / Float(binCount)
+        let geometric = expf(logMagnitudeSum / Float(binCount))
+        return min(1, max(0, geometric / max(0.000001, arithmetic)))
+    }
+
+    private static func pitchConfidence(
+        totalMagnitude: Float,
+        logMagnitudeSum: Float,
+        binCount: Int
+    ) -> Float {
+        1 - spectralFlatness(
+            totalMagnitude: totalMagnitude,
+            logMagnitudeSum: logMagnitudeSum,
+            binCount: binCount
+        )
     }
 }

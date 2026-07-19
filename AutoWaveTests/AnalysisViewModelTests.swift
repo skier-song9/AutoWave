@@ -25,7 +25,7 @@ final class AnalysisViewModelTests: XCTestCase {
 
     func testGeneratorVersionFourEntityRequiresAutomaticRegeneration() throws {
         XCTAssertTrue(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [4]))
-        XCTAssertFalse(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [6, 6, 6, 6, 6]))
+        XCTAssertFalse(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: Array(repeating: BeatmapGenerator.version, count: 5)))
 
         let track = TrackEntity(
             title: "버전 테스트",
@@ -103,6 +103,38 @@ final class AnalysisViewModelTests: XCTestCase {
         let secondRun = try fetchBeatmaps(from: context)
         XCTAssertEqual(secondRun.count, Difficulty.allCases.count)
         XCTAssertEqual(secondRun.map(\.beatmapData), firstData)
+    }
+
+    func testLegacyAnalysisDataFallsBackToFreshVersionedAnalysis() async throws {
+        let relativePath = "AudioFiles/legacy-analysis-\(UUID().uuidString).wav"
+        let audioURL = try makeAudioFixture(relativePath: relativePath)
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let context = try makeInMemoryContext()
+        let legacy = """
+        {"duration":1,"tempo":120,"onsets":[],"meanBass":0.1,"meanMid":0.1,"meanTreble":0.1,"meanRMS":0.1}
+        """.data(using: .utf8)!
+        let track = TrackEntity(
+            title: "레거시 분석",
+            sourceFilename: "legacy.wav",
+            importedAt: Date(timeIntervalSince1970: 0),
+            relativeAudioPath: relativePath,
+            analysisData: legacy
+        )
+        context.insert(track)
+        try context.save()
+
+        let viewModel = AnalysisViewModel()
+        await viewModel.start(track: track, context: context)
+
+        guard case .done = viewModel.state else {
+            XCTFail("Expected legacy analysis to re-run, got \(viewModel.state)")
+            return
+        }
+        XCTAssertEqual(
+            AnalysisViewModel.decodeStoredAnalysis(track.analysisData ?? Data())?.schemaVersion,
+            AnalysisResult.currentSchemaVersion
+        )
     }
 
     func testResetConversionRemovesBeatmapsAndAnalysisData() throws {

@@ -19,6 +19,10 @@ final class AnalysisViewModel {
         storedGeneratorVersions.contains { $0 < BeatmapGenerator.version }
     }
 
+    nonisolated static func decodeStoredAnalysis(_ data: Data) -> AnalysisResult? {
+        AnalysisResult.decodePersisted(data)
+    }
+
     nonisolated static func shouldRegenerate(
         storedLaneCount: Int?,
         chosenLaneCount: Int,
@@ -39,6 +43,7 @@ final class AnalysisViewModel {
             }
             return beatmap.generatorVersion
         }
+        guard !beatmaps.isEmpty, versions.count == beatmaps.count else { return true }
         return shouldRegenerate(storedGeneratorVersions: versions)
     }
 
@@ -135,7 +140,7 @@ final class AnalysisViewModel {
 
     private func loadOrAnalyze(track: TrackEntity) async throws -> AnalysisResult {
         if let data = track.analysisData,
-           let analysis = try? JSONDecoder().decode(AnalysisResult.self, from: data) {
+           let analysis = Self.decodeStoredAnalysis(data) {
             state = .analyzing(progress: 1)
             return analysis
         }

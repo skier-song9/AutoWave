@@ -440,7 +440,7 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
 
         XCTAssertEqual(beatmap.themeID, "neonRush")
-        XCTAssertEqual(beatmap.generatorVersion, 6)
+        XCTAssertEqual(beatmap.generatorVersion, BeatmapGenerator.version)
         XCTAssertEqual(beatmap.palette, beatmapThemePalette(for: GameTheme.presets[1]))
     }
 

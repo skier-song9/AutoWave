@@ -1,7 +1,7 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 6
+    static let version = 7
     static let minimumPlayableNoteTime: TimeInterval = 3
     private static let minimumSequentialGap: TimeInterval = 0.09
     private static let dragSpanPadding: TimeInterval = 0.15
@@ -16,50 +16,121 @@ enum BeatmapGenerator {
         let profile = DifficultyProfile.profile(for: difficulty)
         let laneCount = min(max(laneCountOverride ?? profile.laneCount, 4), 7)
         let beat = beatDuration(for: analysis.tempo)
-        let subdivision = gridSubdivision(for: difficulty, beat: beat)
+        let subdivision = gridSubdivision(
+            for: difficulty,
+            beat: beat,
+            configuration: analysis.configuration
+        )
+        let npsCap = Int(ceil(analysis.configuration.policy(for: difficulty).npsCap))
         var rng = SplitMix64(seed: seed)
         let indexedOnsets = analysis.onsets.enumerated().map {
             IndexedOnset(index: $0.offset, onset: $0.element)
         }
-        let detectedOnsets = selectOnsets(indexedOnsets, profile: profile, analysis: analysis)
-        let onsetRate = analysis.duration > 0
-            ? Double(detectedOnsets.count) / analysis.duration
-            : 0
-        let selected = detectedOnsets.isEmpty || (onsetRate < 0.5 && analysis.duration >= 30)
-            ? fallbackBeatOnsets(for: analysis)
-            : detectedOnsets
-        let patternEvents = enforceMinimumSequentialGap(
-            cullByRate(
-                makePatternEvents(
-                    from: selected,
-                    difficulty: difficulty,
-                    subdivision: subdivision,
-                    duration: analysis.duration,
-                    beatPhase: beatGridPhase(from: selected, subdivision: subdivision),
-                    rng: &rng
-                ),
-                cap: Int(ceil(profile.maxNotesPerSecond))
+        let musicalEvents = MusicalEventAdapter.events(
+            from: analysis,
+            difficulty: difficulty,
+            configuration: analysis.configuration
+        ).map(scheduleMIREvent)
+        let usesMIR = !musicalEvents.isEmpty
+        let selected: [IndexedOnset]
+        var patternEvents: [PatternEvent]
+        if usesMIR {
+            selected = []
+            patternEvents = enforceMinimumSequentialGap(
+                cullByRate(
+                    makeMIRPatternEvents(
+                        musicalEvents,
+                        subdivision: subdivision,
+                        duration: analysis.duration,
+                        phase: beatGridPhase(from: analysis.beatGrid, subdivision: subdivision),
+                        snapTolerance: analysis.configuration.beatSnapTolerance
+                    ),
+                    cap: npsCap
+                )
             )
-        )
-        let survivingSources = selected.filter { item in
-            patternEvents.contains { event in
-                event.isPrimary && event.source.index == item.index
-            }
+        } else {
+            let detectedOnsets = selectOnsets(indexedOnsets, profile: profile, analysis: analysis)
+            let onsetRate = analysis.duration > 0
+                ? Double(detectedOnsets.count) / analysis.duration
+                : 0
+            selected = detectedOnsets.isEmpty || (onsetRate < 0.5 && analysis.duration >= 30)
+                ? fallbackBeatOnsets(for: analysis)
+                : detectedOnsets
+            patternEvents = enforceMinimumSequentialGap(
+                cullByRate(
+                    makePatternEvents(
+                        from: selected,
+                        difficulty: difficulty,
+                        subdivision: subdivision,
+                        duration: analysis.duration,
+                        beatPhase: beatGridPhase(from: selected, subdivision: subdivision),
+                        snapTolerance: analysis.configuration.beatSnapTolerance,
+                        rng: &rng
+                    ),
+                    cap: npsCap
+                )
+            )
         }
-        let dragSources = chooseDragSources(
-            from: survivingSources,
-            ratio: profile.dragRatio,
-            beat: beat,
-            meanBass: analysis.meanBass,
-            rng: &rng
-        )
-        let movingSources = chooseMovingSources(
-            from: dragSources,
-            ratio: profile.movingDragRatio,
-            rng: &rng
-        )
+        var sustainByObjectID: [Int: SustainCandidate] = [:]
+        let dragSources: Set<Int>
+        if usesMIR {
+            let policy = analysis.configuration.policy(for: difficulty)
+            var eligibleByObjectID: [Int: SustainCandidate] = [:]
+            for candidate in analysis.sustainCandidates where
+                candidate.sourceRole != .drum
+                    && candidate.duration >= policy.minimumSustainDuration
+                    && candidate.confidence >= policy.minimumConfidence {
+                if let existing = eligibleByObjectID[candidate.objectID] {
+                    eligibleByObjectID[candidate.objectID] = SustainCandidate.preferred(candidate, over: existing)
+                } else {
+                    eligibleByObjectID[candidate.objectID] = candidate
+                }
+            }
+            let eligible = eligibleByObjectID.values.compactMap(playableSustainCandidate).sorted {
+                if $0.sustainScore == $1.sustainScore { return $0.objectID < $1.objectID }
+                return $0.sustainScore > $1.sustainScore
+            }
+            let count = profile.dragRatio > 0
+                ? min(eligible.count, max(1, Int(ceil(Double(eligible.count) * profile.dragRatio))))
+                : 0
+            let chosen = eligible.prefix(count)
+            for candidate in chosen {
+                sustainByObjectID[candidate.objectID] = candidate
+            }
+            dragSources = Set(chosen.map(\.objectID))
+            patternEvents = insertMIRDragHeads(
+                into: patternEvents,
+                candidates: Array(chosen),
+                preferredSourceObjectIDs: dragSources,
+                subdivision: subdivision,
+                duration: analysis.duration,
+                phase: beatGridPhase(from: analysis.beatGrid, subdivision: subdivision),
+                snapTolerance: analysis.configuration.beatSnapTolerance,
+                npsCap: npsCap
+            )
+        } else {
+            let survivingSources = selected.filter { item in
+                patternEvents.contains { event in
+                    event.isPrimary && event.source.index == item.index
+                }
+            }
+            dragSources = chooseDragSources(
+                from: survivingSources,
+                ratio: profile.dragRatio,
+                beat: beat,
+                meanBass: analysis.meanBass,
+                rng: &rng
+            )
+        }
+        let movingSources = usesMIR
+            ? Set<Int>()
+            : chooseMovingSources(from: dragSources, ratio: profile.movingDragRatio, rng: &rng)
         let centroidValues = analysis.onsets.map(\.centroid).sorted()
-        let groups = makeGroups(patternEvents, maxSimultaneous: profile.maxSimultaneous)
+        let groups = makeGroups(
+            patternEvents,
+            maxSimultaneous: profile.maxSimultaneous,
+            preferredSourceObjectIDs: usesMIR ? dragSources : []
+        )
 
         var candidates: [GeneratedNote] = []
         candidates.reserveCapacity(patternEvents.count)
@@ -85,9 +156,16 @@ enum BeatmapGenerator {
                     laneHistory.removeFirst()
                 }
 
-                let isDrag = event.isPrimary && dragSources.contains(event.source.index)
+                let sourceID = event.sourceObjectID ?? event.source.index
+                let isDrag = event.isPrimary && dragSources.contains(sourceID)
                 let duration: TimeInterval
-                if isDrag, let next = nextOnset(after: event.source, in: selected) {
+                if isDrag, let candidate = sustainByObjectID[sourceID] {
+                    duration = snappedSustainDuration(
+                        candidate: candidate,
+                        beat: beat,
+                        subdivision: subdivision
+                    )
+                } else if isDrag, let next = nextOnset(after: event.source, in: selected) {
                     duration = snappedDuration(
                         gap: next.onset.time - event.source.onset.time,
                         beat: beat,
@@ -98,7 +176,14 @@ enum BeatmapGenerator {
                 }
 
                 let path: [LaneKeyframe]
-                if duration > 0, movingSources.contains(event.source.index) {
+                if duration > 0, let candidate = sustainByObjectID[sourceID] {
+                    path = makeContourLanePath(
+                        candidate: candidate,
+                        startLane: lane,
+                        duration: duration,
+                        laneCount: laneCount
+                    )
+                } else if duration > 0, movingSources.contains(event.source.index) {
                     path = makeLanePath(
                         startLane: lane,
                         duration: duration,
@@ -112,11 +197,13 @@ enum BeatmapGenerator {
 
                 candidates.append(
                     GeneratedNote(
+                        identity: event.identity,
                         kind: duration > 0 ? .drag : .tap,
                         time: event.time,
                         lane: lane,
                         duration: duration,
-                        lanePath: path
+                        lanePath: path,
+                        sourceRole: event.sourceRole
                     )
                 )
             }
@@ -127,9 +214,15 @@ enum BeatmapGenerator {
             maxSimultaneous: profile.maxSimultaneous,
             rng: &rng
         )
+        let minimumLaneGap = difficulty == .heaven || difficulty == .easy ? 0.25 : 0.12
         let notes = enforceSameLaneGap(
-            from: removeDragSpanConflicts(from: placedCandidates),
-            minimumGap: difficulty == .heaven || difficulty == .easy ? 0.25 : 0.12
+            from: removeDragSpanConflicts(
+                from: placedCandidates,
+                laneCount: laneCount,
+                maxSimultaneous: profile.maxSimultaneous,
+                minimumGap: minimumLaneGap
+            ),
+            minimumGap: minimumLaneGap
         )
             .filter { $0.time >= minimumPlayableNoteTime }
             .enumerated().map { index, candidate in
@@ -139,7 +232,8 @@ enum BeatmapGenerator {
                 time: candidate.time,
                 lane: Double(candidate.lane),
                 duration: candidate.duration,
-                lanePath: candidate.lanePath
+                lanePath: candidate.lanePath,
+                sourceRole: candidate.sourceRole
             )
         }
 
@@ -174,6 +268,9 @@ enum BeatmapGenerator {
         var isPrimary: Bool
         var isChord: Bool
         var band: OnsetBand
+        var sourceRole: MusicalRole = .accompaniment
+        var sourceObjectID: Int? = nil
+        var sustainCandidate: SustainCandidate? = nil
 
         var priority: Float {
             source.onset.strength + (isChord ? 0.02 : 0)
@@ -181,11 +278,13 @@ enum BeatmapGenerator {
     }
 
     private struct GeneratedNote {
+        var identity: Int
         var kind: NoteKind
         var time: TimeInterval
         var lane: Int
         var duration: TimeInterval
         var lanePath: [LaneKeyframe]
+        var sourceRole: MusicalRole? = nil
     }
 
     private static func selectOnsets(
@@ -243,6 +342,7 @@ enum BeatmapGenerator {
         subdivision: TimeInterval,
         duration: TimeInterval,
         beatPhase: TimeInterval,
+        snapTolerance: TimeInterval,
         rng: inout SplitMix64
     ) -> [PatternEvent] {
         guard !selected.isEmpty, duration > 0 else { return [] }
@@ -255,11 +355,13 @@ enum BeatmapGenerator {
                     item.onset.time,
                     subdivision: subdivision,
                     duration: duration,
-                    phase: beatPhase
+                    phase: beatPhase,
+                    tolerance: snapTolerance
                 ),
                 isPrimary: true,
                 isChord: false,
-                band: item.onset.band
+                band: item.onset.band,
+                sourceRole: role(for: item.onset.band)
             )
         }
 
@@ -354,6 +456,117 @@ enum BeatmapGenerator {
         return events.sorted(by: patternEventSort)
     }
 
+    private static func makeMIRPatternEvents(
+        _ events: [MusicalEvent],
+        subdivision: TimeInterval,
+        duration: TimeInterval,
+        phase: TimeInterval,
+        snapTolerance: TimeInterval
+    ) -> [PatternEvent] {
+        events.map { event in
+            let onset = Onset(
+                time: event.time,
+                strength: event.importance,
+                bass: event.sourceRole == .bass ? 1 : 0.2,
+                mid: event.sourceRole == .melody || event.sourceRole == .vocal ? 1 : 0.2,
+                treble: event.sourceRole == .accompaniment ? 1 : 0.2,
+                centroid: event.sustainCandidate?.centroidContour.first?.value ?? 440,
+                band: band(for: event.sourceRole)
+            )
+            return PatternEvent(
+                identity: event.id,
+                source: IndexedOnset(index: event.id, onset: onset),
+                time: snappedTime(
+                    event.time,
+                    subdivision: subdivision,
+                    duration: duration,
+                    phase: phase,
+                    tolerance: snapTolerance
+                ),
+                isPrimary: true,
+                isChord: false,
+                band: band(for: event.sourceRole),
+                sourceRole: event.sourceRole,
+                sourceObjectID: event.sourceObjectID,
+                sustainCandidate: event.sustainCandidate
+            )
+        }
+        .sorted(by: patternEventSort)
+    }
+
+    private static func insertMIRDragHeads(
+        into events: [PatternEvent],
+        candidates: [SustainCandidate],
+        preferredSourceObjectIDs: Set<Int>,
+        subdivision: TimeInterval,
+        duration: TimeInterval,
+        phase: TimeInterval,
+        snapTolerance: TimeInterval,
+        npsCap: Int
+    ) -> [PatternEvent] {
+        var result = events
+        for candidate in candidates {
+            let snappedOnset = snappedTime(
+                candidate.onsetTime,
+                subdivision: subdivision,
+                duration: duration,
+                phase: phase,
+                tolerance: snapTolerance
+            )
+            guard !result.contains(where: {
+                $0.sourceObjectID == candidate.objectID
+                    && abs($0.time - snappedOnset) <= 1e-9
+            }) else {
+                continue
+            }
+
+            let onset = Onset(
+                time: candidate.onsetTime,
+                strength: candidate.importanceScore,
+                bass: candidate.sourceRole == .bass ? 1 : 0.2,
+                mid: candidate.sourceRole == .melody || candidate.sourceRole == .vocal ? 1 : 0.2,
+                treble: candidate.sourceRole == .accompaniment ? 1 : 0.2,
+                centroid: candidate.centroidContour.first?.value ?? 440,
+                band: band(for: candidate.sourceRole)
+            )
+            result.append(
+                PatternEvent(
+                    identity: candidate.objectID,
+                    source: IndexedOnset(index: candidate.objectID, onset: onset),
+                    time: snappedOnset,
+                    isPrimary: true,
+                    isChord: false,
+                    band: band(for: candidate.sourceRole),
+                    sourceRole: candidate.sourceRole,
+                    sourceObjectID: candidate.objectID,
+                    sustainCandidate: candidate
+                )
+            )
+        }
+
+        return cullByRate(
+            result,
+            cap: npsCap,
+            preferredSourceObjectIDs: preferredSourceObjectIDs
+        )
+    }
+
+    private static func role(for band: OnsetBand) -> MusicalRole {
+        switch band {
+        case .low: .bass
+        case .mid: .accompaniment
+        case .high: .melody
+        }
+    }
+
+    private static func band(for role: MusicalRole) -> OnsetBand {
+        switch role {
+        case .drum, .bass: .low
+        case .melody, .vocal: .mid
+        case .accompaniment: .high
+        }
+    }
+
     private static func fallbackBeatOnsets(for analysis: AnalysisResult) -> [IndexedOnset] {
         guard analysis.duration >= minimumPlayableNoteTime else {
             return []
@@ -418,6 +631,14 @@ enum BeatmapGenerator {
         return bestPhase
     }
 
+    private static func beatGridPhase(
+        from beatGrid: BeatGrid,
+        subdivision: TimeInterval
+    ) -> TimeInterval {
+        guard subdivision > 0, let firstBeat = beatGrid.beats.first?.time else { return 0 }
+        return firstBeat - (firstBeat / subdivision).rounded(.down) * subdivision
+    }
+
     private static func enforceMinimumSequentialGap(
         _ events: [PatternEvent]
     ) -> [PatternEvent] {
@@ -446,7 +667,8 @@ enum BeatmapGenerator {
 
     private static func cullByRate(
         _ events: [PatternEvent],
-        cap: Int
+        cap: Int,
+        preferredSourceObjectIDs: Set<Int> = []
     ) -> [PatternEvent] {
         guard cap > 0 else { return [] }
         let sorted = events.sorted(by: patternEventSort)
@@ -462,7 +684,12 @@ enum BeatmapGenerator {
                 index += 1
             }
 
-            let group = Array(sorted[start..<index])
+            let group = Array(sorted[start..<index]).sorted {
+                let lhsPreferred = $0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
+                let rhsPreferred = $1.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
+                if lhsPreferred != rhsPreferred { return lhsPreferred }
+                return patternEventSort($0, $1)
+            }
             let windowStart = group[0].time - 1
             active.removeAll { $0.time <= windowStart }
             let chordPair = group.filter { !$0.isChord }.prefix(1)
@@ -470,10 +697,29 @@ enum BeatmapGenerator {
             let toKeep = chordPair.count > 1 ? Array(chordPair) : Array(group.prefix(1))
             var available = cap - active.count
 
+            if available < toKeep.count,
+               toKeep.contains(where: {
+                   $0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
+               }) {
+                let removable = active
+                    .filter { !($0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false) }
+                    .sorted {
+                        if $0.time == $1.time { return $0.identity < $1.identity }
+                        return $0.time < $1.time
+                    }
+                guard let removed = removable.first else { continue }
+                active.removeAll { $0.identity == removed.identity }
+                result.removeAll { $0.identity == removed.identity }
+                available += 1
+            }
+
             if toKeep.count > available, chordPair.count > 1 {
                 let removable = active
                     .filter { !$0.isChord }
-                    .sorted { $0.time < $1.time }
+                    .sorted {
+                        if $0.time == $1.time { return $0.identity < $1.identity }
+                        return $0.time < $1.time
+                    }
                     + active.filter(\.isChord)
                 let removeCount = toKeep.count - available
                 guard removeCount <= removable.count else { continue }
@@ -546,7 +792,8 @@ enum BeatmapGenerator {
 
     private static func makeGroups(
         _ events: [PatternEvent],
-        maxSimultaneous: Int
+        maxSimultaneous: Int,
+        preferredSourceObjectIDs: Set<Int> = []
     ) -> [[PatternEvent]] {
         guard !events.isEmpty else { return [] }
         let sorted = events.sorted(by: patternEventSort)
@@ -560,6 +807,9 @@ enum BeatmapGenerator {
             }
             let group = sorted[start..<index]
                 .sorted {
+                    let lhsPreferred = $0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
+                    let rhsPreferred = $1.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
+                    if lhsPreferred != rhsPreferred { return lhsPreferred }
                     if $0.priority == $1.priority {
                         return $0.identity < $1.identity
                     }
@@ -620,11 +870,13 @@ enum BeatmapGenerator {
                 }
                 result.append(
                     GeneratedNote(
+                        identity: drag.identity,
                         kind: .tap,
                         time: drag.time,
                         lane: drag.lane,
                         duration: 0,
-                        lanePath: []
+                        lanePath: [],
+                        sourceRole: drag.sourceRole
                     )
                 )
                 usedSlots += 1
@@ -714,6 +966,43 @@ enum BeatmapGenerator {
         return Double(lowerCount) / Double(sortedValues.count - 1)
     }
 
+    private static func snappedSustainDuration(
+        candidate: SustainCandidate,
+        beat: TimeInterval,
+        subdivision: TimeInterval
+    ) -> TimeInterval {
+        let maximum = min(candidate.duration, min(4, beat * 8))
+        guard maximum >= subdivision else { return 0 }
+        return floor(maximum / subdivision) * subdivision
+    }
+
+    private static func scheduleMIREvent(_ event: MusicalEvent) -> MusicalEvent {
+        // Shift only sustained layers crossing the safety delay; intro taps remain suppressed.
+        guard let candidate = event.sustainCandidate,
+              let playableCandidate = playableSustainCandidate(candidate),
+              playableCandidate.onsetTime != candidate.onsetTime else {
+            return event
+        }
+
+        var scheduled = event
+        scheduled.time = playableCandidate.onsetTime
+        scheduled.duration = playableCandidate.duration
+        scheduled.sustainCandidate = playableCandidate
+        return scheduled
+    }
+
+    private static func playableSustainCandidate(_ candidate: SustainCandidate) -> SustainCandidate? {
+        let startTime = max(candidate.onsetTime, minimumPlayableNoteTime)
+        guard candidate.offsetTime > startTime else { return nil }
+
+        var playable = candidate
+        playable.onsetTime = startTime
+        playable.duration = candidate.offsetTime - startTime
+        playable.pitchContour = candidate.pitchContour.filter { $0.time >= startTime - 1e-9 }
+        playable.centroidContour = candidate.centroidContour.filter { $0.time >= startTime - 1e-9 }
+        return playable
+    }
+
     private static func snappedDuration(
         gap: TimeInterval,
         beat: TimeInterval,
@@ -764,6 +1053,50 @@ enum BeatmapGenerator {
         }
     }
 
+    private static func makeContourLanePath(
+        candidate: SustainCandidate,
+        startLane: Int,
+        duration: TimeInterval,
+        laneCount: Int
+    ) -> [LaneKeyframe] {
+        let contour = candidate.pitchContour.count >= 2
+            ? candidate.pitchContour
+            : candidate.centroidContour
+        guard contour.count >= 2, duration >= minimumLaneStepInterval else { return [] }
+        let values = contour.map(\.value)
+        guard let minimum = values.min(), let maximum = values.max(), maximum > minimum else {
+            return []
+        }
+
+        var currentLane = min(laneCount - 1, max(0, startLane))
+        var nextOffset = minimumLaneStepInterval
+        var path: [LaneKeyframe] = []
+        for point in contour.dropFirst() {
+            let normalized = Double((point.value - minimum) / (maximum - minimum))
+            let targetLane = min(laneCount - 1, max(0, Int((normalized * Double(laneCount - 1)).rounded())))
+            while currentLane != targetLane,
+                  nextOffset <= duration + 1e-9 {
+                let direction = targetLane > currentLane ? 1 : -1
+                currentLane += direction
+                path.append(
+                    LaneKeyframe(
+                        offset: min(duration, nextOffset),
+                        lane: Double(currentLane)
+                    )
+                )
+                nextOffset += minimumLaneStepInterval
+            }
+            let contourOffset = min(
+                duration,
+                max(0, point.time - candidate.onsetTime)
+            )
+            if contourOffset >= nextOffset, currentLane != targetLane {
+                nextOffset = contourOffset
+            }
+        }
+        return path
+    }
+
     private static func removeOverlaps(from candidates: [GeneratedNote]) -> [GeneratedNote] {
         var lastEndByLane: [Int: TimeInterval] = [:]
         var result: [GeneratedNote] = []
@@ -795,12 +1128,66 @@ enum BeatmapGenerator {
         return result
     }
 
-    private static func removeDragSpanConflicts(from candidates: [GeneratedNote]) -> [GeneratedNote] {
+    private static func removeDragSpanConflicts(
+        from candidates: [GeneratedNote],
+        laneCount: Int,
+        maxSimultaneous: Int,
+        minimumGap: TimeInterval
+    ) -> [GeneratedNote] {
         let drags = candidates.filter { $0.kind == .drag }
-        return candidates.filter { candidate in
-            guard candidate.kind == .tap else { return true }
-            return !tapConflictsWithDragSpan(candidate, drags: drags)
+        var planned = candidates.sorted(by: generatedNoteSort)
+        var index = 0
+
+        while index < planned.count {
+            guard planned[index].kind == .tap else {
+                index += 1
+                continue
+            }
+
+            let candidate = planned[index]
+            guard tapConflictsWithDragSpan(candidate, drags: drags) else {
+                index += 1
+                continue
+            }
+
+            let relocatedLane = nearestLanes(
+                around: candidate.lane,
+                laneCount: laneCount
+            ).first { lane in
+                var relocated = candidate
+                relocated.lane = lane
+                guard !tapConflictsWithDragSpan(relocated, drags: drags),
+                      planned.filter({ abs($0.time - candidate.time) <= 1e-9 }).count <= maxSimultaneous,
+                      !planned.contains(where: { other in
+                          other.identity != candidate.identity
+                              && other.lane == lane
+                              && abs(other.time - candidate.time) < minimumGap - 1e-9
+                      }) else {
+                    return false
+                }
+                return true
+            }
+
+            if let relocatedLane {
+                planned[index].lane = relocatedLane
+                index += 1
+            } else {
+                planned.remove(at: index)
+            }
         }
+
+        return planned.sorted(by: generatedNoteSort)
+    }
+
+    private static func nearestLanes(around lane: Int, laneCount: Int) -> [Int] {
+        guard laneCount > 1 else { return [] }
+        var result: [Int] = []
+        let maximumDistance = max(lane, laneCount - 1 - lane)
+        for distance in 1...maximumDistance {
+            if lane - distance >= 0 { result.append(lane - distance) }
+            if lane + distance < laneCount { result.append(lane + distance) }
+        }
+        return result
     }
 
     private static func tapConflictsWithDragSpan(
@@ -828,7 +1215,8 @@ enum BeatmapGenerator {
     private static func generatedNoteSort(_ lhs: GeneratedNote, _ rhs: GeneratedNote) -> Bool {
         if lhs.time == rhs.time {
             if lhs.lane == rhs.lane {
-                return lhs.kind == .drag
+                if lhs.kind != rhs.kind { return lhs.kind == .drag }
+                return lhs.identity < rhs.identity
             }
             return lhs.lane < rhs.lane
         }
@@ -839,26 +1227,24 @@ enum BeatmapGenerator {
         60 / (tempo > 0 ? tempo : 120)
     }
 
-    private static func gridSubdivision(for difficulty: Difficulty, beat: TimeInterval) -> TimeInterval {
-        switch difficulty {
-        case .heaven, .easy:
-            beat / 2
-        case .normal:
-            beat / 4
-        case .hard, .hell:
-            beat / 8
-        }
+    private static func gridSubdivision(
+        for difficulty: Difficulty,
+        beat: TimeInterval,
+        configuration: AnalyzerConfiguration
+    ) -> TimeInterval {
+        beat / Double(max(1, configuration.policy(for: difficulty).subdivisionDenominator))
     }
 
     private static func snappedTime(
         _ time: TimeInterval,
         subdivision: TimeInterval,
         duration: TimeInterval,
-        phase: TimeInterval
+        phase: TimeInterval,
+        tolerance: TimeInterval
     ) -> TimeInterval {
         let snapped = phase + ((time - phase) / subdivision).rounded() * subdivision
-        let tolerance = min(subdivision * 0.25, 0.06)
-        let resolved = abs(snapped - time) <= tolerance ? snapped : time
+        let resolvedTolerance = min(subdivision * 0.25, tolerance)
+        let resolved = abs(snapped - time) <= resolvedTolerance ? snapped : time
         return min(duration, max(0, resolved))
     }
 
