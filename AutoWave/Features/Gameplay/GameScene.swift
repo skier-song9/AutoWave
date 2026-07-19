@@ -636,7 +636,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let rippleColor: SKColor
     private let judgmentAccentColor: SKColor
     private let scrollSpeed: CGFloat
-    private let noteSpeedMultiplier: @Sendable () -> CGFloat
+    private let noteSpeedState: NoteSpeedMultiplierState
     private let laneCount: Int
     private let completionFallbackTime: TimeInterval
 
@@ -710,7 +710,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         difficulty: Difficulty,
         judgmentEngine: JudgmentEngine,
         visualizerTap: VisualizerTap,
-        noteSpeedMultiplier: @escaping @Sendable () -> CGFloat = { 1 },
+        noteSpeedState: NoteSpeedMultiplierState = NoteSpeedMultiplierState(),
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool,
         audioDuration: TimeInterval,
@@ -734,8 +734,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         rippleColor = makeColor(for: selectedTheme.ripple)
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
-        self.noteSpeedMultiplier = noteSpeedMultiplier
-        scrollSpeedMultiplier = min(max(noteSpeedMultiplier(), 0.5), 1.5)
+        self.noteSpeedState = noteSpeedState
+        scrollSpeedMultiplier = min(max(noteSpeedState.value, 0.5), 1.5)
         laneCount = min(max(beatmap.laneCount, 4), 7)
         let lastNoteTime = beatmap.notes.reduce(0) { max($0, $1.time) }
         completionFallbackTime = max(audioDuration, lastNoteTime) + 2
@@ -1108,7 +1108,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private func refreshNoteSpeedMultiplier() {
-        let multiplier = min(max(noteSpeedMultiplier(), 0.5), 1.5)
+        let multiplier = min(max(noteSpeedState.value, 0.5), 1.5)
         guard abs(multiplier - scrollSpeedMultiplier) > 0.000_001 else { return }
 
         scrollSpeedMultiplier = multiplier

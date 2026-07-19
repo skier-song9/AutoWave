@@ -89,6 +89,8 @@ final class PlaybackClock: @unchecked Sendable {
 }
 
 final class NoteSpeedMultiplierState: @unchecked Sendable {
+    static let allowedValues: [CGFloat] = [0.5, 0.75, 1.0, 1.5]
+
     private var storedValue: CGFloat
     private var lock = os_unfair_lock_s()
 
@@ -106,6 +108,16 @@ final class NoteSpeedMultiplierState: @unchecked Sendable {
         }
     }
 
+    func cycle() -> CGFloat {
+        withLock {
+            let currentIndex = Self.allowedValues.firstIndex {
+                abs($0 - storedValue) < 0.000_001
+            } ?? 2
+            storedValue = Self.allowedValues[(currentIndex + 1) % Self.allowedValues.count]
+            return storedValue
+        }
+    }
+
     private func withLock<T>(_ body: () -> T) -> T {
         os_unfair_lock_lock(&lock)
         defer { os_unfair_lock_unlock(&lock) }
@@ -116,8 +128,6 @@ final class NoteSpeedMultiplierState: @unchecked Sendable {
 @MainActor
 @Observable
 final class GameplayViewModel {
-    static let noteSpeedMultipliers = [0.5, 0.75, 1.0, 1.5]
-
     enum State: Equatable, Sendable {
         case idle
         case ready
@@ -134,7 +144,7 @@ final class GameplayViewModel {
     private(set) var saveErrorMessage: String?
     private(set) var isPaused = false
     private(set) var countdown: Int?
-    private(set) var noteSpeedMultiplier = 1.0
+    private(set) var speedStateRevision = 0
 
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioFile: AVAudioFile?
@@ -142,20 +152,29 @@ final class GameplayViewModel {
     @ObservationIgnored private var visualizerTap: VisualizerTap?
     @ObservationIgnored private var gameplayScene: GameScene?
     @ObservationIgnored private var playbackClock: PlaybackClock?
-    @ObservationIgnored private let noteSpeedState = NoteSpeedMultiplierState()
+    @ObservationIgnored private let noteSpeedState: NoteSpeedMultiplierState
     @ObservationIgnored private var hasCompleted = false
     @ObservationIgnored private var countdownTask: Task<Void, Never>?
     @ObservationIgnored private var perfectHaptic: UIImpactFeedbackGenerator?
     @ObservationIgnored private var lightHaptic: UIImpactFeedbackGenerator?
     @ObservationIgnored private var dragBreakHaptic: UINotificationFeedbackGenerator?
 
-    init(track: TrackEntity, difficulty: Difficulty) {
+    init(
+        track: TrackEntity,
+        difficulty: Difficulty,
+        noteSpeedState: NoteSpeedMultiplierState = NoteSpeedMultiplierState()
+    ) {
         self.track = track
         self.difficulty = difficulty
+        self.noteSpeedState = noteSpeedState
     }
 
     var scene: GameScene? {
         gameplayScene
+    }
+
+    var noteSpeedMultiplier: Double {
+        Double(noteSpeedState.value)
     }
 
     func start(
@@ -216,15 +235,15 @@ final class GameplayViewModel {
             isPaused = false
             countdown = nil
             saveErrorMessage = nil
-            noteSpeedMultiplier = speedMultiplier
             noteSpeedState.set(CGFloat(speedMultiplier))
+            speedStateRevision &+= 1
             let speedState = noteSpeedState
             gameplayScene = GameScene(
                 beatmap: decodedBeatmap,
                 difficulty: difficulty,
                 judgmentEngine: judgmentEngine,
                 visualizerTap: newVisualizerTap,
-                noteSpeedMultiplier: { speedState.value },
+                noteSpeedState: speedState,
                 playbackTime: {
                     clock.currentTime
                 },
@@ -262,24 +281,12 @@ final class GameplayViewModel {
     func cycleNoteSpeedMultiplier(in context: ModelContext) {
         guard state == .ready else { return }
 
-        updateNoteSpeedMultiplier(
-            Self.nextNoteSpeedMultiplier(after: noteSpeedMultiplier),
-            in: context
-        )
+        let multiplier = Double(noteSpeedState.cycle())
+        speedStateRevision &+= 1
+        persistNoteSpeedMultiplier(multiplier, in: context)
     }
 
-    static func nextNoteSpeedMultiplier(after current: Double) -> Double {
-        let currentIndex = noteSpeedMultipliers.firstIndex {
-            abs($0 - current) < 0.000_001
-        } ?? 2
-        let nextIndex = (currentIndex + 1) % noteSpeedMultipliers.count
-        return noteSpeedMultipliers[nextIndex]
-    }
-
-    private func updateNoteSpeedMultiplier(_ multiplier: Double, in context: ModelContext) {
-        noteSpeedMultiplier = multiplier
-        noteSpeedState.set(CGFloat(multiplier))
-
+    private func persistNoteSpeedMultiplier(_ multiplier: Double, in context: ModelContext) {
         let profile = ProfileEntity.current(in: context)
         profile.noteSpeedMultiplier = multiplier
         do {
@@ -451,9 +458,9 @@ final class GameplayViewModel {
     }
 
     private static func validNoteSpeedMultiplier(_ value: Double) -> Double {
-        noteSpeedMultipliers.first {
-            abs($0 - value) < 0.000_001
-        } ?? 1.0
+        NoteSpeedMultiplierState.allowedValues.first {
+            abs(Double($0) - value) < 0.000_001
+        }.map { Double($0) } ?? 1.0
     }
 }
 

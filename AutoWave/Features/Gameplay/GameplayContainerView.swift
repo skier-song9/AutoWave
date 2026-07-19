@@ -9,6 +9,7 @@ struct GameplayContainerView: View {
 
     private let track: TrackEntity?
     private let difficulty: Difficulty?
+    private let noteSpeedState: NoteSpeedMultiplierState
 
     @State private var sessionID = UUID()
     @State private var summary: GameplaySummary?
@@ -16,17 +17,27 @@ struct GameplayContainerView: View {
     init() {
         track = nil
         difficulty = nil
+        noteSpeedState = NoteSpeedMultiplierState()
     }
 
-    init(track: TrackEntity, difficulty: Difficulty) {
+    init(
+        track: TrackEntity,
+        difficulty: Difficulty,
+        noteSpeedState: NoteSpeedMultiplierState = NoteSpeedMultiplierState()
+    ) {
         self.track = track
         self.difficulty = difficulty
+        self.noteSpeedState = noteSpeedState
     }
 
     var body: some View {
         Group {
             if let track, let difficulty {
-                GameplaySessionView(track: track, difficulty: difficulty) { result in
+                GameplaySessionView(
+                    track: track,
+                    difficulty: difficulty,
+                    noteSpeedState: noteSpeedState
+                ) { result in
                     summary = result
                 } onRestart: {
                     summary = nil
@@ -103,6 +114,7 @@ private struct GameplaySessionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: GameplayViewModel
     @State private var isPauseMenuPresented = false
+    @State private var speedFlash = false
 
     private let onComplete: (GameplaySummary) -> Void
     private let onRestart: () -> Void
@@ -111,12 +123,17 @@ private struct GameplaySessionView: View {
     init(
         track: TrackEntity,
         difficulty: Difficulty,
+        noteSpeedState: NoteSpeedMultiplierState,
         onComplete: @escaping (GameplaySummary) -> Void,
         onRestart: @escaping () -> Void,
         onExit: @escaping () -> Void
     ) {
         _viewModel = State(
-            initialValue: GameplayViewModel(track: track, difficulty: difficulty)
+            initialValue: GameplayViewModel(
+                track: track,
+                difficulty: difficulty,
+                noteSpeedState: noteSpeedState
+            )
         )
         self.onComplete = onComplete
         self.onRestart = onRestart
@@ -183,6 +200,7 @@ private struct GameplaySessionView: View {
         if let scene = viewModel.scene {
             ZStack(alignment: .topTrailing) {
                 SpriteView(scene: scene, options: [.ignoresSiblingOrder])
+                    .zIndex(0)
 
                 if !isPauseMenuPresented && !viewModel.isPaused {
                     VStack(alignment: .trailing, spacing: 8) {
@@ -223,17 +241,26 @@ private struct GameplaySessionView: View {
 
     private var speedControl: some View {
         Button {
-            viewModel.cycleNoteSpeedMultiplier(in: modelContext)
+            cycleSpeed()
         } label: {
             Label("배속 \(speedLabel(viewModel.noteSpeedMultiplier))", systemImage: "speedometer")
                 .font(.headline)
                 .padding(12)
+                .id(viewModel.speedStateRevision)
         }
         .buttonStyle(.borderedProminent)
         .tint(.black.opacity(0.65))
         .accessibilityLabel("노트 배속 변경")
         .frame(minWidth: 132, minHeight: 56)
         .contentShape(Rectangle())
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(speedFlash ? Color.yellow.opacity(0.75) : Color.clear)
+        )
+        .scaleEffect(speedFlash ? 1.08 : 1)
+        .animation(.easeOut(duration: 0.16), value: speedFlash)
+        .zIndex(21)
+        .allowsHitTesting(true)
     }
 
     private var pauseOverlay: some View {
@@ -274,6 +301,19 @@ private struct GameplaySessionView: View {
         guard viewModel.state == .ready else { return }
         viewModel.pause()
         isPauseMenuPresented = viewModel.isPaused
+    }
+
+    private func cycleSpeed() {
+        viewModel.cycleNoteSpeedMultiplier(in: modelContext)
+        withAnimation(.easeOut(duration: 0.12)) {
+            speedFlash = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeOut(duration: 0.22)) {
+                speedFlash = false
+            }
+        }
     }
 
     private func speedLabel(_ value: CGFloat) -> String {

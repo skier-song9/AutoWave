@@ -45,6 +45,24 @@ final class GameplayRulesTests: XCTestCase {
         XCTAssertEqual(projection.y(at: 1), projection.hitLineY, accuracy: 0.001)
     }
 
+    func testPerspectiveYMappingIsLinearAcrossEqualTimeDeltas() {
+        let projection = PerspectiveProjection(
+            centerX: 500,
+            topY: 500,
+            hitLineY: 100,
+            bottomLaneWidth: 175,
+            laneCount: 4
+        )
+        let timesToHit: [TimeInterval] = [0, 0.2, 0.4, 0.6]
+        let yPositions = timesToHit.map { timeToHit in
+            projection.y(at: projection.progress(timeToHit: timeToHit, scrollSpeed: 200))
+        }
+
+        XCTAssertEqual(yPositions[1] - yPositions[0], 40, accuracy: 0.001)
+        XCTAssertEqual(yPositions[2] - yPositions[1], 40, accuracy: 0.001)
+        XCTAssertEqual(yPositions[3] - yPositions[2], 40, accuracy: 0.001)
+    }
+
     func testLaneAreaUsesSeventyPercentOfSceneWidth() {
         let rect = GameplayLayout.laneAreaRect(in: CGSize(width: 1_000, height: 500))
 

@@ -57,20 +57,18 @@ final class GameplayStabilityTests: XCTestCase {
         XCTAssertTrue(scene.view?.isMultipleTouchEnabled == true)
     }
 
-    func testNoteSpeedMultiplierCyclesThroughPersistedValues() {
-        let values = [0.5, 0.75, 1.0, 1.5]
+    func testCycleActionMutatesSharedNoteSpeedSourceOfTruth() {
+        let speedState = NoteSpeedMultiplierState(1.0)
 
-        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[0]), values[1])
-        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[1]), values[2])
-        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[2]), values[3])
-        XCTAssertEqual(GameplayViewModel.nextNoteSpeedMultiplier(after: values[3]), values[0])
+        XCTAssertEqual(speedState.cycle(), 1.5, accuracy: 0.001)
+        XCTAssertEqual(speedState.value, 1.5, accuracy: 0.001)
     }
 
-    func testSceneAppliesUpdatedNoteSpeedMultiplierOnNextFrame() {
+    func testScenePollsChangedMultiplierWithoutRecreatingScene() {
         let speedState = NoteSpeedMultiplierState(1.0)
         let scene = makeScene(
             beatmap: makeBeatmap(notes: []),
-            noteSpeedMultiplier: { speedState.value },
+            noteSpeedState: speedState,
             playbackTime: { 0 },
             audioDuration: 10
         )
@@ -167,7 +165,7 @@ final class GameplayStabilityTests: XCTestCase {
 
     private func makeScene(
         beatmap: Beatmap,
-        noteSpeedMultiplier: @escaping @Sendable () -> CGFloat = { 1 },
+        noteSpeedState: NoteSpeedMultiplierState = NoteSpeedMultiplierState(1),
         playbackTime: @escaping @Sendable () -> TimeInterval,
         playbackFinished: @escaping @Sendable () -> Bool = { false },
         audioDuration: TimeInterval,
@@ -178,7 +176,7 @@ final class GameplayStabilityTests: XCTestCase {
             difficulty: .normal,
             judgmentEngine: JudgmentEngine(notes: beatmap.notes),
             visualizerTap: VisualizerTap(),
-            noteSpeedMultiplier: noteSpeedMultiplier,
+            noteSpeedState: noteSpeedState,
             playbackTime: playbackTime,
             playbackFinished: playbackFinished,
             audioDuration: audioDuration,

@@ -9,6 +9,10 @@ struct LibraryView: View {
     @State private var pendingDeleteTrack: TrackEntity?
     @State private var pendingRetryTrack: TrackEntity?
     @State private var retryTrack: TrackEntity?
+    @State private var readyTrack: TrackEntity?
+    @State private var gameplayTrack: TrackEntity?
+    @State private var gameplayDifficulty: Difficulty?
+    @State private var noteSpeedState = NoteSpeedMultiplierState()
 
     var body: some View {
         Group {
@@ -28,10 +32,22 @@ struct LibraryView: View {
             } else {
                 List {
                     ForEach(tracks) { track in
-                        NavigationLink {
-                            destination(for: track)
-                        } label: {
-                            TrackRow(track: track)
+                        Group {
+                            if track.beatmaps.isEmpty {
+                                NavigationLink {
+                                    AnalysisView(track: track)
+                                } label: {
+                                    TrackRow(track: track)
+                                }
+                            } else {
+                                Button {
+                                    readyTrack = track
+                                } label: {
+                                    TrackRow(track: track)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("준비 화면 열기")
+                            }
                         }
                         .swipeActions {
                             Button(role: .destructive) {
@@ -60,6 +76,25 @@ struct LibraryView: View {
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity)
         .navigationTitle("라이브러리")
+        .navigationDestination(
+            isPresented: Binding(
+                get: { gameplayTrack != nil && gameplayDifficulty != nil },
+                set: {
+                    if !$0 {
+                        gameplayTrack = nil
+                        gameplayDifficulty = nil
+                    }
+                }
+            )
+        ) {
+            if let gameplayTrack, let gameplayDifficulty {
+                GameplayContainerView(
+                    track: gameplayTrack,
+                    difficulty: gameplayDifficulty,
+                    noteSpeedState: noteSpeedState
+                )
+            }
+        }
         .navigationDestination(
             isPresented: Binding(
                 get: { retryTrack != nil },
@@ -106,16 +141,25 @@ struct LibraryView: View {
         )) {
             Button("확인", role: .cancel) { }
         } message: {
-            Text(errorMessage ?? "알 수 없는 오류")
+                Text(errorMessage ?? "알 수 없는 오류")
         }
-    }
-
-    @ViewBuilder
-    private func destination(for track: TrackEntity) -> some View {
-        if track.beatmaps.isEmpty {
-            AnalysisView(track: track)
-        } else {
-            DifficultyPickerView(track: track)
+        .sheet(
+            isPresented: Binding(
+                get: { readyTrack != nil },
+                set: { if !$0 { readyTrack = nil } }
+            )
+        ) {
+            if let readyTrack {
+                ReadySheetView(
+                    track: readyTrack,
+                    difficulty: .normal,
+                    speedState: noteSpeedState
+                ) { difficulty in
+                    gameplayTrack = readyTrack
+                    gameplayDifficulty = difficulty
+                    self.readyTrack = nil
+                }
+            }
         }
     }
 
@@ -206,100 +250,19 @@ private struct TrackRow: View {
 }
 
 @MainActor
-private struct DifficultyPickerView: View {
-    let track: TrackEntity
-    @State private var readyDifficulty: Difficulty?
-    @State private var gameplayDifficulty: Difficulty?
-
-    var body: some View {
-        List {
-            ForEach(Difficulty.allCases, id: \.rawValue) { difficulty in
-                let isAvailable = track.beatmaps.contains {
-                    $0.difficulty == difficulty.rawValue
-                }
-
-                if isAvailable {
-                    Button {
-                        readyDifficulty = difficulty
-                    } label: {
-                        difficultyRow(for: difficulty, isAvailable: true)
-                    }
-                } else {
-                    Button {
-                    } label: {
-                        difficultyRow(for: difficulty, isAvailable: false)
-                    }
-                    .disabled(true)
-                }
-            }
-        }
-        .frame(maxWidth: 640)
-        .frame(maxWidth: .infinity)
-        .navigationTitle("난이도 선택")
-        .navigationDestination(
-            isPresented: Binding(
-                get: { gameplayDifficulty != nil },
-                set: { if !$0 { gameplayDifficulty = nil } }
-            )
-        ) {
-            if let gameplayDifficulty {
-                GameplayContainerView(track: track, difficulty: gameplayDifficulty)
-            }
-        }
-        .sheet(
-            isPresented: Binding(
-                get: { readyDifficulty != nil },
-                set: { if !$0 { readyDifficulty = nil } }
-            )
-        ) {
-            if let readyDifficulty {
-                ReadySheetView(track: track, difficulty: readyDifficulty) { difficulty in
-                    self.gameplayDifficulty = difficulty
-                    self.readyDifficulty = nil
-                }
-            }
-        }
-    }
-
-    private func difficultyRow(for difficulty: Difficulty, isAvailable: Bool) -> some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(difficulty.tint)
-                .frame(width: 8)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(difficulty.displayName)
-                    .font(.headline)
-                Text(difficulty.tagline)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            if !isAvailable {
-                Text("준비 중")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 6)
-        .listRowBackground(difficulty.tint.opacity(0.10))
-    }
-}
-
-@MainActor
 private struct ReadySheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
     let track: TrackEntity
     let initialDifficulty: Difficulty
+    let speedState: NoteSpeedMultiplierState
     let onStart: (Difficulty) -> Void
 
     @State private var selectedDifficulty: Difficulty
     @State private var laneCount = 4
-    @State private var speedMultiplier = 1.0
+    @State private var speedStateRevision = 0
+    @State private var speedFlash = false
     @State private var isStarting = false
     @State private var errorMessage: String?
     @State private var viewModel = AnalysisViewModel()
@@ -307,10 +270,12 @@ private struct ReadySheetView: View {
     init(
         track: TrackEntity,
         difficulty: Difficulty,
+        speedState: NoteSpeedMultiplierState,
         onStart: @escaping (Difficulty) -> Void
     ) {
         self.track = track
         initialDifficulty = difficulty
+        self.speedState = speedState
         self.onStart = onStart
         _selectedDifficulty = State(initialValue: difficulty)
     }
@@ -338,7 +303,7 @@ private struct ReadySheetView: View {
                         .pickerStyle(.segmented)
                     }
 
-                    settingRow(title: "LINE (레인 수)") {
+                    settingRow(title: "레인 수") {
                         Stepper("\(laneCount)", value: $laneCount, in: 4...7)
                             .labelsHidden()
                         Text("\(laneCount)")
@@ -346,15 +311,18 @@ private struct ReadySheetView: View {
                             .frame(minWidth: 28)
                     }
 
-                    settingRow(title: "SPEED (배속)") {
+                    settingRow(title: "배속") {
                         Button {
                             cycleSpeed()
                         } label: {
-                            Text(speedLabel(speedMultiplier))
+                            Text(speedLabel(Double(speedState.value)))
                                 .font(.headline.monospacedDigit())
                                 .frame(minWidth: 86)
+                                .id(speedStateRevision)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .scaleEffect(speedFlash ? 1.08 : 1)
+                        .animation(.easeOut(duration: 0.16), value: speedFlash)
                     }
 
                     if isStarting {
@@ -387,9 +355,11 @@ private struct ReadySheetView: View {
                 profile.preferredLaneCount ?? DifficultyProfile.profile(for: initialDifficulty).laneCount,
                 4
             ), 7)
-            speedMultiplier = GameplayViewModel.noteSpeedMultipliers.first {
-                abs($0 - profile.noteSpeedMultiplier) < 0.000_001
+            let speedMultiplier = NoteSpeedMultiplierState.allowedValues.first {
+                abs(Double($0) - profile.noteSpeedMultiplier) < 0.000_001
             } ?? 1.0
+            speedState.set(speedMultiplier)
+            speedStateRevision &+= 1
         }
         .alert("준비 오류", isPresented: Binding(
             get: { errorMessage != nil },
@@ -414,8 +384,9 @@ private struct ReadySheetView: View {
     }
 
     private func cycleSpeed() {
-        let next = GameplayViewModel.nextNoteSpeedMultiplier(after: speedMultiplier)
-        speedMultiplier = next
+        let next = Double(speedState.cycle())
+        speedStateRevision &+= 1
+        flashSpeedControl()
         let profile = ProfileEntity.current(in: modelContext)
         profile.noteSpeedMultiplier = next
         do {
@@ -425,12 +396,25 @@ private struct ReadySheetView: View {
         }
     }
 
+    private func flashSpeedControl() {
+        withAnimation(.easeOut(duration: 0.12)) {
+            speedFlash = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(.easeOut(duration: 0.22)) {
+                speedFlash = false
+            }
+        }
+    }
+
     private func startGame() {
         guard !isStarting else { return }
         isStarting = true
 
         let profile = ProfileEntity.current(in: modelContext)
         profile.preferredLaneCount = laneCount
+        profile.noteSpeedMultiplier = Double(speedState.value)
 
         do {
             try modelContext.save()
