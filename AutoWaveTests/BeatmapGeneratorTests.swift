@@ -34,6 +34,36 @@ final class BeatmapGeneratorTests: XCTestCase {
         XCTAssertEqual(try encoder.encode(first), try encoder.encode(second))
     }
 
+    func testLaneCountOverrideConstrainsHeavenLanesAndRemainsDeterministic() throws {
+        let analysis = makeBusyAnalysis()
+        let first = BeatmapGenerator.generate(
+            from: analysis,
+            difficulty: .heaven,
+            seed: 42,
+            laneCountOverride: 6
+        )
+        let second = BeatmapGenerator.generate(
+            from: analysis,
+            difficulty: .heaven,
+            seed: 42,
+            laneCountOverride: 6
+        )
+
+        XCTAssertEqual(first.laneCount, 6)
+        for note in first.notes {
+            XCTAssertGreaterThanOrEqual(note.lane, 0)
+            XCTAssertLessThan(note.lane, 6)
+            for keyframe in note.lanePath {
+                XCTAssertGreaterThanOrEqual(keyframe.lane, 0)
+                XCTAssertLessThan(keyframe.lane, 6)
+            }
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        XCTAssertEqual(try encoder.encode(first), try encoder.encode(second))
+    }
+
     func testDifferentSeedsProduceDifferentNoteLayouts() {
         let analysis = makeBusyAnalysis()
         let first = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 1)

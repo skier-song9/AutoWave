@@ -7,8 +7,14 @@ enum BeatmapGenerator {
     private static let dragSpanPadding: TimeInterval = 0.15
     private static let minimumLaneStepInterval: TimeInterval = 0.35
 
-    static func generate(from analysis: AnalysisResult, difficulty: Difficulty, seed: UInt64) -> Beatmap {
+    static func generate(
+        from analysis: AnalysisResult,
+        difficulty: Difficulty,
+        seed: UInt64,
+        laneCountOverride: Int? = nil
+    ) -> Beatmap {
         let profile = DifficultyProfile.profile(for: difficulty)
+        let laneCount = min(max(laneCountOverride ?? profile.laneCount, 4), 7)
         let beat = beatDuration(for: analysis.tempo)
         let subdivision = gridSubdivision(for: difficulty, beat: beat)
         var rng = SplitMix64(seed: seed)
@@ -65,7 +71,7 @@ enum BeatmapGenerator {
                 let lane = assignLane(
                     for: event.source.onset,
                     centroidValues: centroidValues,
-                    laneCount: profile.laneCount,
+                    laneCount: laneCount,
                     difficulty: difficulty,
                     previousLane: previousLane,
                     occupiedLanes: lanes,
@@ -96,7 +102,7 @@ enum BeatmapGenerator {
                     path = makeLanePath(
                         startLane: lane,
                         duration: duration,
-                        laneCount: profile.laneCount,
+                        laneCount: laneCount,
                         difficulty: difficulty,
                         rng: &rng
                     )
@@ -152,7 +158,7 @@ enum BeatmapGenerator {
             palette: theme.themePalette,
             generatorVersion: version,
             themeID: theme.id,
-            laneCount: profile.laneCount
+            laneCount: laneCount
         )
     }
 

@@ -51,6 +51,45 @@ final class ModelCodingTests: XCTestCase {
         XCTAssertEqual(decoded.laneCount, 4)
     }
 
+    func testAnalysisResultJSONRoundTripPreservesOnsets() throws {
+        let original = AnalysisResult(
+            duration: 18.5,
+            tempo: 132,
+            onsets: [
+                Onset(
+                    time: 3.25,
+                    strength: 0.8,
+                    bass: 0.7,
+                    mid: 0.2,
+                    treble: 0.1,
+                    centroid: 240,
+                    band: .low
+                ),
+                Onset(
+                    time: 4.0,
+                    strength: 0.6,
+                    bass: 0.1,
+                    mid: 0.3,
+                    treble: 0.8,
+                    centroid: 3_200,
+                    band: .high
+                )
+            ],
+            meanBass: 0.4,
+            meanMid: 0.3,
+            meanTreble: 0.2,
+            meanRMS: 0.5,
+            intensityCurve: [0.1, 0.4, 0.9]
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(original)
+        let decoded = try JSONDecoder().decode(AnalysisResult.self, from: data)
+
+        XCTAssertEqual(try encoder.encode(decoded), data)
+    }
+
     func testInMemoryModelContainerFetchesTrackAndBeatmap() throws {
         let schema = Schema([TrackEntity.self, BeatmapEntity.self, ScoreRecord.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)

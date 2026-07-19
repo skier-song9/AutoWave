@@ -8,6 +8,7 @@ final class TrackEntity {
     var importedAt: Date
     var relativeAudioPath: String
     var duration: TimeInterval = 0
+    var analysisData: Data? = nil
 
     @Relationship(deleteRule: .cascade, inverse: \BeatmapEntity.track)
     var beatmaps: [BeatmapEntity] = []
@@ -30,12 +31,14 @@ final class TrackEntity {
         sourceFilename: String,
         importedAt: Date,
         relativeAudioPath: String,
-        duration: TimeInterval = 0
+        duration: TimeInterval = 0,
+        analysisData: Data? = nil
     ) {
         self.title = title
         self.sourceFilename = sourceFilename
         self.importedAt = importedAt
         self.relativeAudioPath = relativeAudioPath
         self.duration = duration
+        self.analysisData = analysisData
     }
 }

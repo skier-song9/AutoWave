@@ -48,4 +48,23 @@ final class ProfileEntityTests: XCTestCase {
         XCTAssertEqual(reloaded.count, 1)
         XCTAssertEqual(reloaded.first?.noteSpeedMultiplier, 1.5)
     }
+
+    func testPreferredLaneCountDefaultsToNilAndPersistsAcrossContexts() throws {
+        let schema = Schema([ProfileEntity.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = ModelContext(container)
+        let profile = ProfileEntity()
+
+        context.insert(profile)
+        XCTAssertNil(profile.preferredLaneCount)
+
+        profile.preferredLaneCount = 6
+        try context.save()
+
+        let reloadedContext = ModelContext(container)
+        let reloaded = try reloadedContext.fetch(FetchDescriptor<ProfileEntity>())
+
+        XCTAssertEqual(reloaded.first?.preferredLaneCount, 6)
+    }
 }

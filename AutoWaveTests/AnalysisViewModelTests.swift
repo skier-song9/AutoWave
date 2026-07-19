@@ -6,6 +6,23 @@ import XCTest
 
 @MainActor
 final class AnalysisViewModelTests: XCTestCase {
+    func testRegenerationDecisionUsesLaneCountAndGeneratorVersion() {
+        XCTAssertTrue(
+            AnalysisViewModel.shouldRegenerate(
+                storedLaneCount: 4,
+                chosenLaneCount: 5,
+                storedGeneratorVersion: BeatmapGenerator.version
+            )
+        )
+        XCTAssertFalse(
+            AnalysisViewModel.shouldRegenerate(
+                storedLaneCount: 5,
+                chosenLaneCount: 5,
+                storedGeneratorVersion: BeatmapGenerator.version
+            )
+        )
+    }
+
     func testGeneratorVersionFourEntityRequiresAutomaticRegeneration() throws {
         XCTAssertTrue(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [4]))
         XCTAssertFalse(AnalysisViewModel.shouldRegenerate(storedGeneratorVersions: [6, 6, 6, 6, 6]))
@@ -86,6 +103,31 @@ final class AnalysisViewModelTests: XCTestCase {
         let secondRun = try fetchBeatmaps(from: context)
         XCTAssertEqual(secondRun.count, Difficulty.allCases.count)
         XCTAssertEqual(secondRun.map(\.beatmapData), firstData)
+    }
+
+    func testResetConversionRemovesBeatmapsAndAnalysisData() throws {
+        let context = try makeInMemoryContext()
+        let track = TrackEntity(
+            title: "다시 변환 테스트",
+            sourceFilename: "retry.wav",
+            importedAt: Date(timeIntervalSince1970: 0),
+            relativeAudioPath: "AudioFiles/retry.wav"
+        )
+        track.analysisData = Data([1, 2, 3])
+        let beatmap = BeatmapEntity(
+            difficulty: Difficulty.normal.rawValue,
+            beatmapData: Data([4, 5, 6]),
+            track: track
+        )
+        context.insert(track)
+        context.insert(beatmap)
+        try context.save()
+
+        try AnalysisViewModel.resetConversion(for: track, in: context)
+
+        XCTAssertTrue(track.beatmaps.isEmpty)
+        XCTAssertNil(track.analysisData)
+        XCTAssertTrue(try context.fetch(FetchDescriptor<BeatmapEntity>()).isEmpty)
     }
 
     private func fetchBeatmaps(from context: ModelContext) throws -> [BeatmapEntity] {

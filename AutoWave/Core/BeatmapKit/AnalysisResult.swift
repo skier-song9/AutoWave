@@ -1,12 +1,12 @@
 import Foundation
 
-enum OnsetBand: Sendable, Equatable {
+enum OnsetBand: String, Codable, Sendable, Equatable {
     case low
     case mid
     case high
 }
 
-struct Onset: Sendable {
+struct Onset: Codable, Sendable {
     var time: TimeInterval
     var strength: Float
     var bass: Float
@@ -44,7 +44,7 @@ struct Onset: Sendable {
     }
 }
 
-struct AnalysisResult: Sendable {
+struct AnalysisResult: Codable, Sendable {
     var duration: TimeInterval
     var tempo: Double
     var onsets: [Onset]
