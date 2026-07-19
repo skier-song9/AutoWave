@@ -75,31 +75,32 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         func update(
             playbackTime: TimeInterval,
-            hitLineY: CGFloat,
-            laneOriginX: CGFloat,
-            laneWidth: CGFloat,
+            projection: PerspectiveProjection,
             scrollSpeed: CGFloat,
             sceneHeight: CGFloat
         ) {
             let timeToHit = note.time - playbackTime
-            let y = hitLineY + CGFloat(timeToHit) * scrollSpeed
+            let progress = projection.progress(
+                timeToHit: timeToHit,
+                scrollSpeed: scrollSpeed
+            )
+            let point = projection.point(lane: note.lane, at: progress)
+            let scale = projection.scale(at: progress)
 
             guard !isConsumed, playbackTime <= note.time + 0.150 else {
                 isHidden = true
                 return
             }
 
-            let halfNoteHeight = noteHeight * 0.5
-            guard y <= sceneHeight + halfNoteHeight, y >= -halfNoteHeight else {
+            let halfNoteHeight = noteHeight * scale * 0.5
+            guard point.y <= sceneHeight + halfNoteHeight, point.y >= -halfNoteHeight else {
                 isHidden = true
                 return
             }
 
             isHidden = false
-            position = CGPoint(
-                x: laneOriginX + (CGFloat(note.lane) + 0.5) * laneWidth,
-                y: y
-            )
+            position = point
+            setScale(scale)
         }
     }
 
@@ -114,7 +115,7 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         private struct SpinePoint {
             let offset: TimeInterval
-            let point: CGPoint
+            let lane: Double
         }
 
         let note: Note
@@ -140,9 +141,10 @@ final class GameScene: SKScene, @unchecked Sendable {
         private var state: State = .pending
         private var fingerOn = false
         private var spinePoints: [SpinePoint] = []
-        private var laneOriginX: CGFloat = 0
+        private var projection: PerspectiveProjection?
         private var laneWidth: CGFloat = 0
         private var scrollSpeed: CGFloat = 0
+        private var sceneHeight: CGFloat = 0
         private var breakOffset: TimeInterval?
         private var glowPulseRemaining: TimeInterval = 0
 
@@ -204,10 +206,15 @@ final class GameScene: SKScene, @unchecked Sendable {
                 && abs(touchLane - lane(at: 0)) <= laneTolerance(at: elapsed)
         }
 
-        func updateLayout(laneOriginX: CGFloat, laneWidth: CGFloat, scrollSpeed: CGFloat) {
-            self.laneOriginX = laneOriginX
-            self.laneWidth = laneWidth
+        func updateLayout(
+            projection: PerspectiveProjection,
+            scrollSpeed: CGFloat,
+            sceneHeight: CGFloat
+        ) {
+            self.projection = projection
+            self.laneWidth = projection.bottomLaneWidth
             self.scrollSpeed = scrollSpeed
+            self.sceneHeight = sceneHeight
             band.lineWidth = laneWidth * 0.45
             core.lineWidth = 2
             completedBand.lineWidth = band.lineWidth
@@ -241,24 +248,24 @@ final class GameScene: SKScene, @unchecked Sendable {
             )
             cropMask.path = CGPath(
                 rect: CGRect(
-                    x: -laneWidth * 8,
+                    x: -laneWidth * CGFloat(projection.laneCount) * 8,
                     y: 0,
-                    width: laneWidth * 16,
-                    height: max(CGFloat(note.duration) * scrollSpeed + capHeight + 1_000, 1_000)
+                    width: laneWidth * CGFloat(projection.laneCount) * 16,
+                    height: max(sceneHeight * 2, 1_000)
                 ),
                 transform: nil
             )
             spinePoints = makeSpinePoints()
-            applyPaths()
+            applyPaths(at: 0)
         }
 
-        func markActivated() {
+        func markActivated(at time: TimeInterval) {
             state = .active
             fingerOn = true
             glowPulseRemaining = 0.18
             headCap.isHidden = true
             crest.isHidden = false
-            crest.position = point(at: 0)
+            crest.position = point(at: 0, playbackTime: time)
         }
 
         func setFingerOn(_ isOn: Bool) {
@@ -271,7 +278,10 @@ final class GameScene: SKScene, @unchecked Sendable {
             fingerOn = true
             glowPulseRemaining = 0.12
             crest.isHidden = false
-            crest.position = point(at: max(time - note.time, 0))
+            crest.position = point(
+                at: max(time - note.time, 0),
+                playbackTime: time
+            )
         }
 
         func markBroken(at time: TimeInterval) {
@@ -280,7 +290,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             breakOffset = min(max(time - note.time, 0), note.duration)
             cropMask.position.y = 0
             cropNode.isHidden = false
-            applyPaths()
+            applyPaths(at: time)
             crest.isHidden = true
         }
 
@@ -314,40 +324,50 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         func update(
             playbackTime: TimeInterval,
-            hitLineY: CGFloat,
-            sceneHeight: CGFloat,
             delta: TimeInterval
         ) {
-            let positions = GameplayLayout.ribbonPositions(
-                hitLineY: hitLineY,
+            guard let projection else { return }
+
+            let headProgress = projection.progress(
                 timeToHit: note.time - playbackTime,
-                duration: note.duration,
                 scrollSpeed: scrollSpeed
             )
-            position.y = positions.head
+            let headPoint = point(at: 0, playbackTime: playbackTime)
+            let headScale = projection.scale(at: headProgress)
+            position = .zero
+            headCap.position = headPoint
+            headCap.setScale(headScale)
+            band.lineWidth = laneWidth * 0.45 * headScale
+            completedBand.lineWidth = band.lineWidth
+            remainingBand.lineWidth = band.lineWidth
+            core.lineWidth = 2 * headScale
+            completedCore.lineWidth = core.lineWidth
+            remainingCore.lineWidth = core.lineWidth
 
             if state == .active {
-                let elapsed = min(max(playbackTime - note.time, 0), note.duration)
-                cropMask.position.y = CGFloat(elapsed) * scrollSpeed
+                cropMask.position.y = headPoint.y
                 glowPulseRemaining = max(glowPulseRemaining - delta, 0)
                 let pulse = CGFloat(glowPulseRemaining / 0.12)
                 crest.alpha = 0.78 + 0.22 * min(pulse, 1)
-                crest.setScale(1 + 0.12 * min(pulse, 1))
+                crest.setScale(headScale * (1 + 0.12 * min(pulse, 1)))
             } else {
                 cropMask.position.y = 0
                 crest.alpha = 1
-                crest.setScale(1)
+                crest.setScale(headScale)
             }
 
             if state == .pending, playbackTime > note.time + 0.150 {
                 markInactive()
             }
 
-            let endY = positions.tail
-            let visibilityPadding = capHeight * 0.5
-            let visible = max(position.y, endY) >= -visibilityPadding
-                && min(position.y, endY) <= sceneHeight + visibilityPadding
+            let tailPoint = point(at: note.duration, playbackTime: playbackTime)
+            let visibilityPadding = capHeight * headScale * 0.5
+            let visible = max(headPoint.y, tailPoint.y) >= -visibilityPadding
+                && min(headPoint.y, tailPoint.y) <= sceneHeight + visibilityPadding
             isHidden = state == .finished || !visible
+            if !isHidden {
+                applyPaths(at: playbackTime)
+            }
 
             guard state == .active, fingerOn, playbackTime < note.time + note.duration else {
                 crest.isHidden = true
@@ -355,7 +375,10 @@ final class GameScene: SKScene, @unchecked Sendable {
             }
 
             crest.isHidden = false
-            crest.position = point(at: max(playbackTime - note.time, 0))
+            crest.position = point(
+                at: max(playbackTime - note.time, 0),
+                playbackTime: playbackTime
+            )
         }
 
         private func makeSpinePoints() -> [SpinePoint] {
@@ -363,57 +386,53 @@ final class GameScene: SKScene, @unchecked Sendable {
 
             var points = [SpinePoint]()
             points.reserveCapacity(note.lanePath.count + 2)
-            points.append(spinePoint(at: 0))
+            points.append(SpinePoint(offset: 0, lane: note.lane))
             for keyframe in note.lanePath where keyframe.offset > 0 && keyframe.offset < note.duration {
-                points.append(spinePoint(at: keyframe.offset))
+                points.append(SpinePoint(offset: keyframe.offset, lane: keyframe.lane))
             }
             if points.last?.offset != note.duration {
-                points.append(spinePoint(at: note.duration))
+                points.append(SpinePoint(offset: note.duration, lane: lane(at: note.duration)))
             }
             return points
         }
 
-        private func spinePoint(at offset: TimeInterval) -> SpinePoint {
-            SpinePoint(
-                offset: offset,
-                point: CGPoint(
-                    x: laneOriginX + (CGFloat(lane(at: offset)) + 0.5) * laneWidth,
-                    y: CGFloat(offset) * scrollSpeed
-                )
-            )
-        }
-
-        private func applyPaths() {
-            band.path = steppedPath(from: spinePoints)
+        private func applyPaths(at playbackTime: TimeInterval) {
+            band.path = steppedPath(at: playbackTime)
             core.path = band.path
-            band.strokeColor = bodyBandColor
-            core.strokeColor = bodyColor
+            let inactive = state == .inactive
+            band.strokeColor = inactive ? inactiveBandColor : bodyBandColor
+            core.strokeColor = inactive ? inactiveCoreColor : bodyColor
             band.isHidden = false
             core.isHidden = false
             completedBand.isHidden = true
             completedCore.isHidden = true
             remainingBand.isHidden = true
             remainingCore.isHidden = true
-            headCap.position = spinePoints.first?.point ?? .zero
             headCap.isHidden = state == .active || state == .finished
+            if inactive {
+                headCap.fillColor = inactiveBandColor
+                headCap.strokeColor = inactiveCoreColor
+            }
 
             guard state == .broken, let breakOffset else {
                 return
             }
 
-            let boundary = SpinePoint(offset: breakOffset, point: point(at: breakOffset))
-            var completed = spinePoints.filter { $0.offset < breakOffset }
-            completed.append(boundary)
-            var remaining = [boundary]
-            remaining.append(contentsOf: spinePoints.filter { $0.offset > breakOffset })
-
             band.isHidden = true
             core.isHidden = true
-            completedBand.path = steppedPath(from: completed)
+            completedBand.path = steppedPath(
+                at: playbackTime,
+                from: 0,
+                through: breakOffset
+            )
             completedCore.path = completedBand.path
             completedBand.strokeColor = bodyBandColor
             completedCore.strokeColor = bodyColor
-            remainingBand.path = steppedPath(from: remaining)
+            remainingBand.path = steppedPath(
+                at: playbackTime,
+                from: breakOffset,
+                through: note.duration
+            )
             remainingCore.path = remainingBand.path
             remainingBand.strokeColor = inactiveBandColor
             remainingCore.strokeColor = inactiveCoreColor
@@ -423,26 +442,47 @@ final class GameScene: SKScene, @unchecked Sendable {
             remainingCore.isHidden = false
         }
 
-        private func steppedPath(from points: [SpinePoint]) -> CGPath? {
-            guard let first = points.first else { return nil }
-
+        private func steppedPath(
+            at playbackTime: TimeInterval,
+            from startOffset: TimeInterval = 0,
+            through endOffset: TimeInterval? = nil
+        ) -> CGPath? {
+            let first = point(at: startOffset, playbackTime: playbackTime)
             let path = CGMutablePath()
-            path.move(to: first.point)
-            for index in 1..<points.count {
-                let previous = points[index - 1].point
-                let current = points[index].point
+            path.move(to: first)
+            var previous = first
+            var previousOffset = startOffset
+
+            for spinePoint in spinePoints where spinePoint.offset > startOffset {
+                if let endOffset, spinePoint.offset >= endOffset {
+                    break
+                }
+
+                let current = point(at: spinePoint.offset, playbackTime: playbackTime)
+                path.addLine(to: CGPoint(x: previous.x, y: current.y))
+                path.addLine(to: current)
+                previous = current
+                previousOffset = spinePoint.offset
+            }
+
+            if let endOffset, endOffset > previousOffset {
+                let current = point(at: endOffset, playbackTime: playbackTime)
                 path.addLine(to: CGPoint(x: previous.x, y: current.y))
                 path.addLine(to: current)
             }
             return path
         }
 
-        private func point(at offset: TimeInterval) -> CGPoint {
-            guard laneWidth > 0 else { return .zero }
-            return CGPoint(
-                x: laneOriginX + (CGFloat(lane(at: offset)) + 0.5) * laneWidth,
-                y: CGFloat(offset) * scrollSpeed
+        private func point(
+            at offset: TimeInterval,
+            playbackTime: TimeInterval
+        ) -> CGPoint {
+            guard let projection, laneWidth > 0 else { return .zero }
+            let progress = projection.progress(
+                timeToHit: note.time + offset - playbackTime,
+                scrollSpeed: scrollSpeed
             )
+            return projection.point(lane: lane(at: offset), at: progress)
         }
 
         private func lane(at elapsed: TimeInterval) -> Double {
@@ -639,6 +679,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var laneAreaRect = CGRect.zero
     private var laneWidth: CGFloat = 0
     private var hitLineY: CGFloat = 0
+    private var perspectiveProjection: PerspectiveProjection?
     private var scrollSpeedMultiplier: CGFloat = 1
     private var nextRippleIndex = 0
     private var nextRippleSpawnTime: TimeInterval = 0.25
@@ -829,9 +870,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             panel.zPosition = 10.1
         }
 
-        comboCaptionLabel.text = "콤보"
-        comboCaptionLabel.fontSize = 12
-        comboCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
+        comboCaptionLabel.text = nil
+        comboCaptionLabel.isHidden = true
         comboCaptionLabel.horizontalAlignmentMode = .center
         comboCaptionLabel.verticalAlignmentMode = .center
         comboCaptionLabel.zPosition = 12
@@ -856,7 +896,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             addChild(outline)
         }
 
-        latestJudgmentLabel.fontSize = 19
+        latestJudgmentLabel.fontSize = 22
         latestJudgmentLabel.fontColor = judgmentAccentColor
         latestJudgmentLabel.horizontalAlignmentMode = .center
         latestJudgmentLabel.verticalAlignmentMode = .center
@@ -971,21 +1011,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             return
         }
 
-        for node in noteNodes {
-            node.update(
-                playbackTime: time,
-                hitLineY: hitLineY,
-                laneOriginX: laneAreaRect.minX,
-                laneWidth: laneWidth,
-                scrollSpeed: currentScrollSpeed,
-                sceneHeight: size.height
-            )
+        if let perspectiveProjection {
+            for node in noteNodes {
+                node.update(
+                    playbackTime: time,
+                    projection: perspectiveProjection,
+                    scrollSpeed: currentScrollSpeed,
+                    sceneHeight: size.height
+                )
+            }
         }
         for node in ribbonNodes {
             node.update(
                 playbackTime: time,
-                hitLineY: hitLineY,
-                sceneHeight: size.height,
                 delta: delta
             )
         }
@@ -1015,7 +1053,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                    touchLane: touchLane,
                    at: time
                ) {
-                ribbon.markActivated()
+                ribbon.markActivated(at: time)
                 activeDragTouchID = ObjectIdentifier(touch)
                 activeDragNoteID = ribbon.note.id
                 activeDragTouchLane = touchLane
@@ -1074,12 +1112,12 @@ final class GameScene: SKScene, @unchecked Sendable {
         guard abs(multiplier - scrollSpeedMultiplier) > 0.000_001 else { return }
 
         scrollSpeedMultiplier = multiplier
-        guard laneWidth > 0 else { return }
+        guard let perspectiveProjection, laneWidth > 0 else { return }
         for node in ribbonNodes {
             node.updateLayout(
-                laneOriginX: laneAreaRect.minX,
-                laneWidth: laneWidth,
-                scrollSpeed: currentScrollSpeed
+                projection: perspectiveProjection,
+                scrollSpeed: currentScrollSpeed,
+                sceneHeight: size.height
             )
         }
     }
@@ -1103,24 +1141,42 @@ final class GameScene: SKScene, @unchecked Sendable {
         laneAreaRect = GameplayLayout.laneAreaRect(in: size)
         let usableWidth = laneAreaRect.width
         laneWidth = usableWidth / CGFloat(laneCount)
+        hitLineY = GameplayLayout.hitLineY(in: size)
+        let projection = PerspectiveProjection(
+            centerX: laneAreaRect.midX,
+            topY: size.height,
+            hitLineY: hitLineY,
+            bottomLaneWidth: laneWidth,
+            laneCount: laneCount
+        )
+        perspectiveProjection = projection
         let laneFillColor = makeColor(for: theme.laneFill)
         for (index, lane) in laneFillNodes.enumerated() {
-            lane.path = CGPath(
-                rect: CGRect(
-                    x: laneAreaRect.minX + CGFloat(index) * laneWidth,
-                    y: 0,
-                    width: laneWidth,
-                    height: size.height
-                ),
-                transform: nil
-            )
+            let path = CGMutablePath()
+            path.move(to: CGPoint(
+                x: projection.laneBoundaryX(index, at: 0),
+                y: projection.y(at: 0)
+            ))
+            path.addLine(to: CGPoint(
+                x: projection.laneBoundaryX(index + 1, at: 0),
+                y: projection.y(at: 0)
+            ))
+            path.addLine(to: CGPoint(
+                x: projection.laneBoundaryX(index + 1, at: 1),
+                y: projection.y(at: 1)
+            ))
+            path.addLine(to: CGPoint(
+                x: projection.laneBoundaryX(index, at: 1),
+                y: projection.y(at: 1)
+            ))
+            path.closeSubpath()
+            lane.path = path
             lane.fillColor = laneFillColor
             lane.alpha = index.isMultiple(of: 2)
                 ? CGFloat(theme.laneFillAlpha)
                 : CGFloat(theme.laneFillAlpha * 0.6)
         }
 
-        hitLineY = GameplayLayout.hitLineY(in: size)
         let hitLinePath = CGMutablePath()
         hitLinePath.move(to: CGPoint(x: laneAreaRect.minX, y: hitLineY))
         hitLinePath.addLine(to: CGPoint(x: laneAreaRect.maxX, y: hitLineY))
@@ -1128,9 +1184,14 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         for (index, boundary) in boundaryNodes.enumerated() {
             let path = CGMutablePath()
-            let x = laneAreaRect.minX + CGFloat(index) * laneWidth
-            path.move(to: CGPoint(x: x, y: 0))
-            path.addLine(to: CGPoint(x: x, y: size.height))
+            path.move(to: CGPoint(
+                x: projection.laneBoundaryX(index, at: 0),
+                y: projection.y(at: 0)
+            ))
+            path.addLine(to: CGPoint(
+                x: projection.laneBoundaryX(index, at: 1),
+                y: projection.y(at: 1)
+            ))
             boundary.path = path
             boundary.strokeColor = laneLineColor
             boundary.lineWidth = 1
@@ -1167,7 +1228,6 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         let hudTopMargin = max(size.height * 0.06, 54)
-        comboCaptionLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin)
         comboValueLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 48)
         for (index, outline) in comboOutlineLabels.enumerated() {
             let offset = comboOutlineOffsets[index]
@@ -1176,7 +1236,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 y: comboValueLabel.position.y + offset.y
             )
         }
-        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 96)
+        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin)
         let scoreCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
         scoreCaptionLabel.position = CGPoint(x: scoreCenterX, y: size.height * 0.10 + 16)
         scoreValueLabel.position = CGPoint(x: scoreCenterX, y: size.height * 0.10 - 10)
@@ -1242,9 +1302,9 @@ final class GameScene: SKScene, @unchecked Sendable {
             inner: comboPanelInnerNode,
             rect: CGRect(
                 x: laneAreaRect.midX - 100,
-                y: max(size.height - hudTopMargin - 128, 8),
+                y: max(size.height - hudTopMargin - 84, 8),
                 width: 200,
-                height: 144
+                height: 100
             )
         )
 
@@ -1253,9 +1313,9 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
         for node in ribbonNodes {
             node.updateLayout(
-                laneOriginX: laneAreaRect.minX,
-                laneWidth: laneWidth,
-                scrollSpeed: currentScrollSpeed
+                projection: projection,
+                scrollSpeed: currentScrollSpeed,
+                sceneHeight: size.height
             )
         }
         for node in hitPopNodes {
@@ -1536,19 +1596,19 @@ final class GameScene: SKScene, @unchecked Sendable {
         let judgmentText: String
         switch result.judgment {
         case .perfect:
-            judgmentText = "퍼펙트"
+            judgmentText = "PERFECT"
             onHaptic(.perfect)
         case .great:
-            judgmentText = "그레이트"
+            judgmentText = "GREAT"
             onHaptic(.light)
         case .good:
-            judgmentText = "굿"
+            judgmentText = "GOOD"
             onHaptic(.light)
         case .bad:
-            judgmentText = "배드"
+            judgmentText = "BAD"
             onHaptic(.light)
         case .miss:
-            judgmentText = "미스"
+            judgmentText = "MISS"
         }
 
         latestJudgmentLabel.text = judgmentText

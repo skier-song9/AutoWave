@@ -208,6 +208,6 @@ final class GameplayStabilityTests: XCTestCase {
 
     private func judgmentLabel(in scene: GameScene) -> SKLabelNode {
         scene.children.compactMap { $0 as? SKLabelNode }
-            .first { $0.text == "미스" }!
+            .first { $0.text == "MISS" }!
     }
 }

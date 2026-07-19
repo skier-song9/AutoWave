@@ -1,6 +1,68 @@
 import CoreGraphics
 import Foundation
 
+struct PerspectiveProjection: Equatable, Sendable {
+    static let defaultTopScale: CGFloat = 0.22
+
+    let centerX: CGFloat
+    let topY: CGFloat
+    let hitLineY: CGFloat
+    let bottomLaneWidth: CGFloat
+    let laneCount: Int
+    let topScale: CGFloat
+
+    init(
+        centerX: CGFloat,
+        topY: CGFloat,
+        hitLineY: CGFloat,
+        bottomLaneWidth: CGFloat,
+        laneCount: Int,
+        topScale: CGFloat = PerspectiveProjection.defaultTopScale
+    ) {
+        self.centerX = centerX
+        self.topY = topY
+        self.hitLineY = hitLineY
+        self.bottomLaneWidth = bottomLaneWidth
+        self.laneCount = laneCount
+        self.topScale = topScale
+    }
+
+    var travelHeight: CGFloat {
+        max(topY - hitLineY, 0)
+    }
+
+    func progress(timeToHit: TimeInterval, scrollSpeed: CGFloat) -> CGFloat {
+        guard travelHeight > 0 else { return 1 }
+        return 1 - CGFloat(timeToHit) * scrollSpeed / travelHeight
+    }
+
+    func y(at progress: CGFloat) -> CGFloat {
+        topY - travelHeight * progress
+    }
+
+    func laneWidth(at progress: CGFloat) -> CGFloat {
+        let clampedProgress = min(max(progress, 0), 1)
+        return bottomLaneWidth * (topScale + (1 - topScale) * clampedProgress)
+    }
+
+    func laneCenterX(_ lane: Double, at progress: CGFloat) -> CGFloat {
+        centerX + (CGFloat(lane) + 0.5 - CGFloat(laneCount) / 2) * laneWidth(at: progress)
+    }
+
+    func laneBoundaryX(_ boundary: Int, at progress: CGFloat) -> CGFloat {
+        centerX + (CGFloat(boundary) - CGFloat(laneCount) / 2) * laneWidth(at: progress)
+    }
+
+    func scale(at progress: CGFloat) -> CGFloat {
+        let clampedProgress = min(max(progress, 0), 1)
+        return topScale + (1 - topScale) * clampedProgress
+    }
+
+    func point(lane: Double, at progress: CGFloat) -> CGPoint {
+        CGPoint(x: laneCenterX(lane, at: progress), y: y(at: progress))
+    }
+}
+
 enum GameplayLayout {
     static let laneWidthRatio: CGFloat = 0.70
 

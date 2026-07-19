@@ -3,6 +3,48 @@ import XCTest
 @testable import AutoWave
 
 final class GameplayRulesTests: XCTestCase {
+    func testPerspectiveLaneWidthGrowsMonotonically() {
+        let projection = PerspectiveProjection(
+            centerX: 500,
+            topY: 500,
+            hitLineY: 100,
+            bottomLaneWidth: 175,
+            laneCount: 4
+        )
+
+        XCTAssertLessThan(projection.laneWidth(at: 0), projection.laneWidth(at: 0.5))
+        XCTAssertLessThan(projection.laneWidth(at: 0.5), projection.laneWidth(at: 1))
+    }
+
+    func testPerspectiveLaneCentersStaySymmetricAroundCenter() {
+        let projection = PerspectiveProjection(
+            centerX: 500,
+            topY: 500,
+            hitLineY: 100,
+            bottomLaneWidth: 175,
+            laneCount: 4
+        )
+
+        let left = projection.laneCenterX(0, at: 0.4)
+        let right = projection.laneCenterX(3, at: 0.4)
+
+        XCTAssertEqual(left + right, projection.centerX * 2, accuracy: 0.001)
+    }
+
+    func testPerspectiveAtHitLineMatchesBottomLaneGeometry() {
+        let projection = PerspectiveProjection(
+            centerX: 500,
+            topY: 500,
+            hitLineY: 100,
+            bottomLaneWidth: 175,
+            laneCount: 4
+        )
+
+        XCTAssertEqual(projection.laneWidth(at: 1), 175, accuracy: 0.001)
+        XCTAssertEqual(projection.laneCenterX(0, at: 1), 237.5, accuracy: 0.001)
+        XCTAssertEqual(projection.y(at: 1), projection.hitLineY, accuracy: 0.001)
+    }
+
     func testLaneAreaUsesSeventyPercentOfSceneWidth() {
         let rect = GameplayLayout.laneAreaRect(in: CGSize(width: 1_000, height: 500))
 
