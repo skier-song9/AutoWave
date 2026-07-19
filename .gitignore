@@ -30,3 +30,7 @@ Pods/
 fastlane/report.xml
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Codex runtime artifacts
+.codex/
+.mcp.json
