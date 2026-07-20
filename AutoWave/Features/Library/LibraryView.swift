@@ -33,21 +33,7 @@ struct LibraryView: View {
                 List {
                     ForEach(tracks) { track in
                         Group {
-                            if track.beatmaps.isEmpty {
-                                NavigationLink {
-                                    AnalysisView(track: track)
-                                } label: {
-                                    TrackRow(track: track)
-                                }
-                            } else {
-                                Button {
-                                    readyTrack = track
-                                } label: {
-                                    TrackRow(track: track)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("준비 화면 열기")
-                            }
+                            trackEntry(for: track)
                         }
                         .swipeActions {
                             Button(role: .destructive) {
@@ -69,10 +55,23 @@ struct LibraryView: View {
                                 Label("삭제", systemImage: "trash")
                             }
                         }
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(AppTheme.panel)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                        .strokeBorder(AppTheme.line, lineWidth: 1)
+                                }
+                                .padding(.vertical, 4)
+                        )
+                        .listRowSeparator(.hidden)
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
+        .appScreenBackground()
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity)
         .navigationTitle("라이브러리")
@@ -163,6 +162,25 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
+    private func trackEntry(for track: TrackEntity) -> some View {
+        if track.beatmaps.isEmpty {
+            NavigationLink {
+                AnalysisView(track: track)
+            } label: {
+                TrackRow(track: track)
+            }
+        } else {
+            Button {
+                readyTrack = track
+            } label: {
+                TrackRow(track: track)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("준비 화면 열기")
+        }
+    }
+
     private func delete(_ track: TrackEntity) {
         let audioURL = track.audioURL
         modelContext.delete(track)
@@ -225,6 +243,9 @@ private struct TrackRow: View {
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
                             .background(trackColor.opacity(0.15), in: Capsule())
+                            .overlay {
+                                Capsule().strokeBorder(trackColor.opacity(0.4), lineWidth: 0.5)
+                            }
                     }
                 }
             }
@@ -341,6 +362,7 @@ private struct ReadySheetView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
+            .appScreenBackground()
             .navigationTitle("준비")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

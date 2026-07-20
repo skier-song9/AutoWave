@@ -9,7 +9,7 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 28) {
+            VStack(spacing: 20) {
                 header
                 primaryActions
                 upcomingSection
@@ -20,6 +20,7 @@ struct HomeView: View {
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
         }
+        .appScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .task {
             _ = ProfileEntity.current(in: modelContext)
@@ -38,6 +39,7 @@ struct HomeView: View {
 
             Text("AutoWave")
                 .font(.largeTitle.bold())
+                .foregroundStyle(AppTheme.accentGradient)
 
             Spacer()
 
@@ -59,6 +61,7 @@ struct HomeView: View {
                 LibraryView()
             } label: {
                 Label("플레이", systemImage: "play.fill")
+                    .font(.headline)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -73,17 +76,21 @@ struct HomeView: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
         }
+        .panelCard()
     }
 
     private var upcomingSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("곧 만나요")
-                .font(.headline)
+                .font(.footnote.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(AppTheme.accent)
 
             disabledRow(title: "멀티플레이 (준비 중)", systemImage: "person.2.fill")
             disabledRow(title: "계정 연동 (준비 중)", systemImage: "link.circle")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .panelCard()
     }
 
     @ViewBuilder
@@ -99,12 +106,17 @@ struct HomeView: View {
     @ViewBuilder
     private var latestScore: some View {
         if let record = scoreRecords.first {
-            Text(
-                "최근 기록: \(record.track.title) · \(difficultyName(for: record.difficulty)) · \(record.score)점"
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(AppTheme.good)
+                Text(
+                    "최근 기록: \(record.track.title) · \(difficultyName(for: record.difficulty)) · \(record.score)점"
+                )
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.muted)
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .panelCard(padding: 12)
         }
     }
 

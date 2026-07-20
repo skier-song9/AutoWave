@@ -14,28 +14,54 @@ struct ImportView: View {
         VStack(spacing: 20) {
             if isImporting {
                 ProgressView("음원 가져오는 중…")
+                    .tint(AppTheme.accent)
             } else if let importedTrack {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(AppTheme.good)
                 Text("가져오기 완료")
                     .font(.headline)
                 Text(importedTrack.title)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.muted)
                 Button("라이브러리로 돌아가기") {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             } else {
-                Button("파일 선택") {
+                Button {
                     isImporterPresented = true
+                } label: {
+                    VStack(spacing: 12) {
+                        Image(systemName: "waveform.badge.plus")
+                            .font(.system(size: 40))
+                            .foregroundStyle(AppTheme.accentGradient)
+                        Text("음원 파일 선택")
+                            .font(.headline)
+                        Text("mp3 · m4a · wav")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 44)
+                    .background(
+                        AppTheme.panel,
+                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .strokeBorder(
+                                AppTheme.accent.opacity(0.55),
+                                style: StrokeStyle(lineWidth: 1.5, dash: [7, 6])
+                            )
+                    }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
             }
         }
         .padding()
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .appScreenBackground()
         .navigationTitle("음원 가져오기")
         .fileImporter(
             isPresented: $isImporterPresented,

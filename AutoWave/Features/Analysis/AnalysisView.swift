@@ -28,11 +28,12 @@ struct AnalysisView: View {
                 content(for: track)
             } else {
                 Text("변환할 음원을 선택해 주세요.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.muted)
             }
         }
         .frame(maxWidth: 640)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .appScreenBackground()
         .navigationTitle("변환")
         .task(id: track?.persistentModelID) {
             guard let track else { return }
@@ -60,12 +61,13 @@ struct AnalysisView: View {
             )
         case .done:
             VStack(spacing: 24) {
-                RippleProgressView(progress: 1, tint: generatedPalette?.color ?? .accentColor)
+                RippleProgressView(progress: 1, tint: generatedPalette?.color ?? AppTheme.accent)
                     .frame(width: 140, height: 140)
                 Text("완료!")
                     .font(.largeTitle.bold())
+                    .foregroundStyle(AppTheme.accentGradient)
                 Text(track.title)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.muted)
                 Button("라이브러리로") {
                     dismiss()
                 }
@@ -95,14 +97,14 @@ struct AnalysisView: View {
         VStack(spacing: 24) {
             RippleProgressView(
                 progress: progress,
-                tint: generatedPalette?.color ?? .accentColor
+                tint: generatedPalette?.color ?? AppTheme.accent
             )
                 .frame(width: 180, height: 180)
             Text(title)
                 .font(.title3.weight(.semibold))
             Text(detail)
                 .font(.headline.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(AppTheme.muted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()

@@ -23,5 +23,7 @@ struct RootView: View {
                     }
                 }
         }
+        .tint(AppTheme.accent)
+        .preferredColorScheme(.dark)
     }
 }

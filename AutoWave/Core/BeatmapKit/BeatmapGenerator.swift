@@ -1,17 +1,33 @@
 import Foundation
 
 enum BeatmapGenerator {
-    static let version = 8
-    static let minimumPlayableNoteTime: TimeInterval = 3
+    static let version = 9
+    static let minimumPlayableNoteTime: TimeInterval = 2
     private static let minimumSequentialGap: TimeInterval = 0.09
     private static let dragSpanPadding: TimeInterval = 0.15
     private static let minimumLaneStepInterval: TimeInterval = 0.35
+
+    // Tunables ported from tools/notegen-playground.html (playground parity).
+    struct GenerationTuning: Sendable, Equatable {
+        var laneMappingWeights: [MusicalRole: Double]
+        var antiRepeatStrength: Double
+        var dragMinDuration: TimeInterval
+        var dragMaxDuration: TimeInterval
+
+        static let `default` = GenerationTuning(
+            laneMappingWeights: [.drum: 0, .bass: -0.25, .melody: 0.2, .vocal: 0.15, .accompaniment: 0.05],
+            antiRepeatStrength: 1,
+            dragMinDuration: 0.125,
+            dragMaxDuration: 4
+        )
+    }
 
     static func generate(
         from analysis: AnalysisResult,
         difficulty: Difficulty,
         seed: UInt64,
-        laneCountOverride: Int? = nil
+        laneCountOverride: Int? = nil,
+        tuning: GenerationTuning = .default
     ) -> Beatmap {
         let profile = DifficultyProfile.profile(for: difficulty)
         let laneCount = min(max(laneCountOverride ?? profile.laneCount, 4), 7)
@@ -141,12 +157,13 @@ enum BeatmapGenerator {
             for event in group {
                 let lane = assignLane(
                     for: event.source.onset,
+                    role: event.sourceRole,
                     centroidValues: centroidValues,
                     laneCount: laneCount,
-                    difficulty: difficulty,
                     previousLane: previousLane,
                     occupiedLanes: lanes,
                     recentLanes: laneHistory,
+                    tuning: tuning,
                     rng: &rng
                 )
                 lanes.append(lane)
@@ -163,13 +180,15 @@ enum BeatmapGenerator {
                     duration = snappedSustainDuration(
                         candidate: candidate,
                         beat: beat,
-                        subdivision: subdivision
+                        subdivision: subdivision,
+                        tuning: tuning
                     )
                 } else if isDrag, let next = nextOnset(after: event.source, in: selected) {
                     duration = snappedDuration(
                         gap: next.onset.time - event.source.onset.time,
                         beat: beat,
-                        subdivision: subdivision
+                        subdivision: subdivision,
+                        tuning: tuning
                     )
                 } else {
                     duration = 0
@@ -899,12 +918,13 @@ enum BeatmapGenerator {
 
     private static func assignLane(
         for onset: Onset,
+        role: MusicalRole?,
         centroidValues: [Float],
         laneCount: Int,
-        difficulty: Difficulty,
         previousLane: Int?,
         occupiedLanes: [Int],
         recentLanes: [Int],
+        tuning: GenerationTuning,
         rng: inout SplitMix64
     ) -> Int {
         let centroidPercentile = percentileRank(of: onset.centroid, in: centroidValues)
@@ -918,16 +938,20 @@ enum BeatmapGenerator {
             region = min(laneCount - 1, (laneCount * 2) / 3)...(laneCount - 1)
         }
         let regionWidth = region.upperBound - region.lowerBound + 1
-        let regionPosition = min(regionWidth - 1, max(0, Int(floor(centroidPercentile * Double(regionWidth)))))
+        let bias = role.flatMap { tuning.laneMappingWeights[$0] } ?? 0
+        let regionPosition = min(
+            regionWidth - 1,
+            max(0, Int(floor((centroidPercentile + bias * 0.35 + 0.5) * Double(regionWidth))))
+        )
         let baseLane = region.lowerBound + regionPosition
-        let variation = rng.nextDouble()
         let direction = rng.nextDouble() < 0.5 ? -1 : 1
+        let variation = rng.nextDouble()
         var preferredLane = baseLane
         if previousLane == baseLane, variation < 0.6 {
             preferredLane += direction
         } else if variation < 0.2 {
             preferredLane += direction
-        } else if (difficulty == .hard || difficulty == .hell), variation > 0.82 {
+        } else if laneCount >= 6, variation > 0.82 {
             preferredLane += direction * 2
         }
         preferredLane = min(region.upperBound, max(region.lowerBound, preferredLane))
@@ -935,11 +959,12 @@ enum BeatmapGenerator {
         let offsets = [0, 1, -1, 2, -2, 3, -3]
         let orderedCandidates = offsets.map { preferredLane + $0 }
             .filter { $0 >= region.lowerBound && $0 <= region.upperBound }
-        if let lane = orderedCandidates.first(where: {
-            !occupiedLanes.contains($0)
-                && !repeatsPattern(candidate: $0, history: recentLanes)
-        }) {
-            return lane
+        for lane in orderedCandidates where !occupiedLanes.contains(lane) {
+            // Anti-repeat is probabilistic: strength 1 always avoids repeats, 0 ignores them.
+            if !repeatsPattern(candidate: lane, history: recentLanes)
+                || rng.nextDouble() > tuning.antiRepeatStrength {
+                return lane
+            }
         }
         if let lane = orderedCandidates.first(where: { !occupiedLanes.contains($0) }) {
             return lane
@@ -969,11 +994,13 @@ enum BeatmapGenerator {
     private static func snappedSustainDuration(
         candidate: SustainCandidate,
         beat: TimeInterval,
-        subdivision: TimeInterval
+        subdivision: TimeInterval,
+        tuning: GenerationTuning
     ) -> TimeInterval {
-        let maximum = min(candidate.duration, min(4, beat * 8))
+        let maximum = min(candidate.duration, tuning.dragMaxDuration, min(4, beat * 8))
         guard maximum >= subdivision else { return 0 }
-        return floor(maximum / subdivision) * subdivision
+        let snapped = floor(maximum / subdivision) * subdivision
+        return snapped < tuning.dragMinDuration ? 0 : snapped
     }
 
     private static func scheduleMIREvent(_ event: MusicalEvent) -> MusicalEvent {
@@ -1006,11 +1033,13 @@ enum BeatmapGenerator {
     private static func snappedDuration(
         gap: TimeInterval,
         beat: TimeInterval,
-        subdivision: TimeInterval
+        subdivision: TimeInterval,
+        tuning: GenerationTuning
     ) -> TimeInterval {
-        let maximum = min(gap - beat * 0.25, 4)
+        let maximum = min(gap - beat * 0.25, tuning.dragMaxDuration)
         guard maximum >= subdivision else { return 0 }
-        return floor(maximum / subdivision) * subdivision
+        let snapped = floor(maximum / subdivision) * subdivision
+        return snapped < tuning.dragMinDuration ? 0 : snapped
     }
 
     private static func makeLanePath(

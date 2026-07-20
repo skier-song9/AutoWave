@@ -145,10 +145,76 @@ final class BeatmapGeneratorTests: XCTestCase {
 
         let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .easy, seed: 42)
 
+        XCTAssertFalse(beatmap.notes.isEmpty)
         XCTAssertTrue(beatmap.notes.allSatisfy {
             $0.time >= BeatmapGenerator.minimumPlayableNoteTime
         })
-        XCTAssertTrue(beatmap.notes.contains { $0.time >= 3.0 })
+        // 2s rule: the 2.5s onset is playable, the 0.25s onset is not.
+        XCTAssertTrue(beatmap.notes.contains { $0.time >= 2.0 && $0.time < 3.0 })
+        // Later material is still represented (a drag from 2.5s spans past 3s,
+        // or the 3.5s onset survives as its own note).
+        XCTAssertTrue(beatmap.notes.contains { $0.time + $0.duration >= 3.0 })
+    }
+
+    func testLaneMappingWeightsBiasLanePlacement() {
+        let analysis = makeBusyAnalysis()
+        var leftTuning = BeatmapGenerator.GenerationTuning.default
+        leftTuning.laneMappingWeights[.bass] = -1
+        var rightTuning = BeatmapGenerator.GenerationTuning.default
+        rightTuning.laneMappingWeights[.bass] = 1
+
+        func meanBassLane(_ tuning: BeatmapGenerator.GenerationTuning) -> Double {
+            let notes = BeatmapGenerator.generate(
+                from: analysis,
+                difficulty: .normal,
+                seed: 42,
+                tuning: tuning
+            ).notes.filter { $0.sourceRole == .bass }
+            XCTAssertFalse(notes.isEmpty)
+            guard !notes.isEmpty else { return 0 }
+            return notes.map(\.lane).reduce(0, +) / Double(notes.count)
+        }
+
+        XCTAssertLessThan(meanBassLane(leftTuning), meanBassLane(rightTuning))
+    }
+
+    func testDragDurationTuningBounds() {
+        let analysis = makeBusyAnalysis()
+
+        var noDrags = BeatmapGenerator.GenerationTuning.default
+        noDrags.dragMinDuration = 100
+        let tapsOnly = BeatmapGenerator.generate(
+            from: analysis,
+            difficulty: .normal,
+            seed: 42,
+            tuning: noDrags
+        )
+        XCTAssertTrue(tapsOnly.notes.allSatisfy { $0.kind == .tap })
+
+        var shortDrags = BeatmapGenerator.GenerationTuning.default
+        shortDrags.dragMaxDuration = 0.5
+        let capped = BeatmapGenerator.generate(
+            from: analysis,
+            difficulty: .normal,
+            seed: 42,
+            tuning: shortDrags
+        )
+        for note in capped.notes where note.kind == .drag {
+            XCTAssertLessThanOrEqual(note.duration, 0.5 + 1e-9)
+        }
+    }
+
+    func testTuningIsDeterministicForSameSeed() throws {
+        let analysis = makeBusyAnalysis()
+        var tuning = BeatmapGenerator.GenerationTuning.default
+        tuning.antiRepeatStrength = 0.5
+
+        let first = BeatmapGenerator.generate(from: analysis, difficulty: .hard, seed: 7, tuning: tuning)
+        let second = BeatmapGenerator.generate(from: analysis, difficulty: .hard, seed: 7, tuning: tuning)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        XCTAssertEqual(try encoder.encode(first), try encoder.encode(second))
     }
 
     func testLateOnsetsAreNotSuppressedByLoudIntro() {
@@ -216,8 +282,14 @@ final class BeatmapGeneratorTests: XCTestCase {
 
         let notes = BeatmapGenerator.generate(from: analysis, difficulty: .easy, seed: 42).notes
 
+        // Snapping must keep detected off-beat phase: every surviving note sits on
+        // an original onset time, never pulled to the integer beat grid.
+        let expectedTimes = [3.125, 3.625, 4.125]
+        XCTAssertGreaterThanOrEqual(notes.count, 2)
+        XCTAssertTrue(notes.allSatisfy { note in
+            expectedTimes.contains { abs($0 - note.time) < 1e-9 }
+        })
         XCTAssertTrue(notes.contains { abs($0.time - 3.125) < 1e-9 })
-        XCTAssertTrue(notes.contains { abs($0.time - 3.625) < 1e-9 })
     }
 
     func testGeneratorDoesNotFillUnsupportedGridSlots() {
@@ -277,7 +349,10 @@ final class BeatmapGeneratorTests: XCTestCase {
         let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
 
         XCTAssertGreaterThanOrEqual(Double(beatmap.notes.count) / duration, 0.5)
-        XCTAssertGreaterThanOrEqual(beatmap.notes.first?.time ?? 0, 3.0)
+        XCTAssertGreaterThanOrEqual(
+            beatmap.notes.first?.time ?? 0,
+            BeatmapGenerator.minimumPlayableNoteTime
+        )
     }
 
     func testIntensityCurveIncreasesSecondHalfDensity() {

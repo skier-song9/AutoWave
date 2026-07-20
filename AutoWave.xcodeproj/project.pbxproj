@@ -10,6 +10,7 @@
 		025A5495589AA78AD0C29B98 /* BeatmapEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08741EB06AB2B080C0197533 /* BeatmapEntity.swift */; };
 		05D08CA540F4625164D5CED5 /* TrackEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91602EB219128BF634E03E0 /* TrackEntity.swift */; };
 		0DA17E97E776CA4019BC9342 /* JudgmentEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5669E62DC438C49A5F39AE5F /* JudgmentEngineTests.swift */; };
+		12311BBFA1F9FE18758F1402 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8540866DB1CB22E9F591622 /* AppTheme.swift */; };
 		12BBF03790D7DCADD0B6A93C /* ImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5D751B151161690EDDFEA7 /* ImportView.swift */; };
 		172A6F44EF074B2507A1DE2F /* BeatmapKitAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */; };
 		1740DB7215EC84D3663B01B1 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96472A1EC16937AB76ADB76 /* LibraryView.swift */; };
@@ -124,6 +125,7 @@
 		E49BF2A7EFA9D22279590D3E /* AnalysisResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisResult.swift; sourceTree = "<group>"; };
 		EE593BEDFA8C184576267AA8 /* ProfileEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEntity.swift; sourceTree = "<group>"; };
 		F4283D2922AD1AC93C422163 /* GameplayRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayRules.swift; sourceTree = "<group>"; };
+		F8540866DB1CB22E9F591622 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
 		F91602EB219128BF634E03E0 /* TrackEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackEntity.swift; sourceTree = "<group>"; };
 		FB122FE7F3C40CD155F2DBFF /* AutoWaveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AutoWaveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB38A448795557AE2574814B /* AudioImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioImportService.swift; sourceTree = "<group>"; };
@@ -154,6 +156,7 @@
 		2DABA5B39B51145694A0CEB0 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				F8540866DB1CB22E9F591622 /* AppTheme.swift */,
 				A1D15A471F4F77E1DB616866 /* Beatmap.swift */,
 				08741EB06AB2B080C0197533 /* BeatmapEntity.swift */,
 				B838024FE85D54086054056C /* Difficulty.swift */,
@@ -422,6 +425,7 @@
 				A6F6EDC8B5C80B704D21F08D /* AnalysisResult.swift in Sources */,
 				74CA114E342806F12686B95E /* AnalysisView.swift in Sources */,
 				BCD2346A76B40E8A5C6FB56C /* AnalysisViewModel.swift in Sources */,
+				12311BBFA1F9FE18758F1402 /* AppTheme.swift in Sources */,
 				6DBB1DA40153D4511D06DF93 /* AudioDecoder.swift in Sources */,
 				5B150776122256F3A7FF12EC /* AudioImportService.swift in Sources */,
 				7794D0FE9A4CB81F5F599717 /* AutoWaveApp.swift in Sources */,
