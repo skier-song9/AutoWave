@@ -91,7 +91,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             let point = projection.point(lane: note.lane, at: progress)
             let scale = projection.scale(at: progress)
 
-            guard !isConsumed, playbackTime <= note.time + 0.150 else {
+            guard !isConsumed, playbackTime <= note.time + 0.170 else {
                 isHidden = true
                 return
             }
@@ -206,7 +206,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             guard state == .pending else { return false }
             let timeOffset = abs(note.time - time)
             let elapsed = max(time - note.time, 0)
-            return timeOffset <= 0.150
+            return timeOffset <= 0.170
                 && abs(touchLane - lane(at: 0)) <= laneTolerance(at: elapsed)
         }
 
@@ -364,7 +364,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 crest.setScale(headScale)
             }
 
-            if state == .pending, playbackTime > note.time + 0.150 {
+            if state == .pending, playbackTime > note.time + 0.170 {
                 markInactive()
             }
 
@@ -1526,7 +1526,7 @@ final class GameScene: SKScene, @unchecked Sendable {
 
     private func nearestRibbon(at time: TimeInterval, touchLane: Double) -> RibbonNode? {
         var nearest: RibbonNode?
-        var nearestDistance = TimeInterval(0.150).nextUp
+        var nearestDistance = TimeInterval(0.170).nextUp
 
         for node in ribbonNodes where node.canBegin(at: time, touchLane: touchLane) {
             let distance = abs(node.note.time - time)
@@ -1587,11 +1587,11 @@ final class GameScene: SKScene, @unchecked Sendable {
 
     private func consumeNearestVisual(lane: Int, at time: TimeInterval) {
         var nearest: TapNoteNode?
-        var nearestDistance = TimeInterval(0.150).nextUp
+        var nearestDistance = TimeInterval(0.170).nextUp
 
         for node in noteNodes where !node.isConsumed && node.note.lane == Double(lane) {
             let distance = abs(node.note.time - time)
-            guard distance <= 0.150, distance < nearestDistance else { continue }
+            guard distance <= 0.170, distance < nearestDistance else { continue }
             nearest = node
             nearestDistance = distance
         }

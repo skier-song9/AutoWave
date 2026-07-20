@@ -52,10 +52,10 @@ final class JudgmentEngine: @unchecked Sendable {
     }
 
     private enum Window {
-        static let perfect: TimeInterval = 0.045
-        static let great: TimeInterval = 0.080
-        static let good: TimeInterval = 0.115
-        static let bad: TimeInterval = 0.150
+        static let perfect: TimeInterval = 0.060
+        static let great: TimeInterval = 0.100
+        static let good: TimeInterval = 0.130
+        static let bad: TimeInterval = 0.170
         static let comparisonEpsilon: TimeInterval = 0.000_000_001
         static let dragLaneTolerance = 1.1
         static let dragTransitionTolerance = 1.5

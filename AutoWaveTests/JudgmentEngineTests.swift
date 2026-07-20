@@ -5,45 +5,45 @@ import XCTest
 final class JudgmentEngineTests: XCTestCase {
     func testWindowEdgesAreInclusiveAndClassifiedByNarrowestWindow() {
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.955)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.940)?.judgment,
             .perfect
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.045)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.060)?.judgment,
             .perfect
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.920)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.900)?.judgment,
             .great
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.080)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.100)?.judgment,
             .great
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.885)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.870)?.judgment,
             .good
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.115)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.130)?.judgment,
             .good
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.850)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.830)?.judgment,
             .bad
         )
         XCTAssertEqual(
-            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.150)?.judgment,
+            JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.170)?.judgment,
             .bad
         )
         let badEngine = JudgmentEngine(notes: [note(at: 1.0)])
         XCTAssertEqual(
-            badEngine.tap(lane: 0, at: 1.150),
+            badEngine.tap(lane: 0, at: 1.170),
             JudgmentResult(judgment: .bad, pointsAwarded: 1, combo: 0, score: 1)
         )
         XCTAssertEqual(badEngine.judgmentCounts.bad, 1)
-        XCTAssertNil(JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.849))
-        XCTAssertNil(JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.151))
+        XCTAssertNil(JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 0.829))
+        XCTAssertNil(JudgmentEngine(notes: [note(at: 1.0)]).tap(lane: 0, at: 1.171))
     }
 
     func testAdvanceEmitsMissAfterBadWindowAndResetsCombo() {
@@ -51,9 +51,9 @@ final class JudgmentEngineTests: XCTestCase {
         let engine = JudgmentEngine(notes: notes)
 
         XCTAssertEqual(engine.tap(lane: 0, at: 1.0)?.combo, 1)
-        XCTAssertEqual(engine.advance(to: 1.151), [])
+        XCTAssertEqual(engine.advance(to: 1.171), [])
         XCTAssertEqual(
-            engine.advance(to: 2.151),
+            engine.advance(to: 2.171),
             [JudgmentResult(judgment: .miss, pointsAwarded: 0, combo: 0, score: 6)]
         )
         XCTAssertEqual(engine.judgmentCounts.miss, 1)
@@ -84,7 +84,7 @@ final class JudgmentEngineTests: XCTestCase {
         _ = engine.tap(lane: 0, at: 2.0)
 
         XCTAssertEqual(
-            engine.tap(lane: 0, at: 3.080),
+            engine.tap(lane: 0, at: 3.100),
             JudgmentResult(judgment: .great, pointsAwarded: 6, combo: 3, score: 19)
         )
     }
@@ -97,11 +97,11 @@ final class JudgmentEngineTests: XCTestCase {
         XCTAssertEqual(engine.tap(lane: 0, at: 1.0)?.pointsAwarded, 6)
         XCTAssertEqual(engine.tap(lane: 0, at: 2.0)?.pointsAwarded, 7)
         XCTAssertEqual(
-            engine.tap(lane: 0, at: 3.115),
+            engine.tap(lane: 0, at: 3.130),
             JudgmentResult(judgment: .good, pointsAwarded: 2, combo: 0, score: 15)
         )
         XCTAssertEqual(
-            engine.tap(lane: 0, at: 4.080),
+            engine.tap(lane: 0, at: 4.100),
             JudgmentResult(judgment: .great, pointsAwarded: 4, combo: 1, score: 19)
         )
     }
@@ -168,7 +168,7 @@ final class JudgmentEngineTests: XCTestCase {
         let engine = JudgmentEngine(notes: [drag])
 
         XCTAssertEqual(
-            engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.150),
+            engine.beginDrag(noteID: drag.id, touchLane: 1.0, at: 1.170),
             JudgmentResult(judgment: .good, pointsAwarded: 2, combo: 0, score: 2)
         )
     }
@@ -356,7 +356,7 @@ final class JudgmentEngineTests: XCTestCase {
         let engine = JudgmentEngine(notes: [drag])
 
         XCTAssertEqual(
-            engine.advance(to: 1.151),
+            engine.advance(to: 1.171),
             [JudgmentResult(judgment: .miss, pointsAwarded: 0, combo: 0, score: 0)]
         )
         XCTAssertEqual(engine.advance(to: 2.0), [])
@@ -371,11 +371,11 @@ final class JudgmentEngineTests: XCTestCase {
         let engine = JudgmentEngine(notes: (1...20).map { note(at: TimeInterval($0)) })
 
         XCTAssertFalse(engine.isGameOver)
-        XCTAssertEqual(engine.advance(to: 19.151).count, 19)
+        XCTAssertEqual(engine.advance(to: 19.171).count, 19)
         XCTAssertEqual(engine.life, 5)
         XCTAssertFalse(engine.isGameOver)
 
-        XCTAssertEqual(engine.advance(to: 20.151).count, 1)
+        XCTAssertEqual(engine.advance(to: 20.171).count, 1)
         XCTAssertEqual(engine.life, 0)
         XCTAssertTrue(engine.isGameOver)
 
@@ -389,7 +389,7 @@ final class JudgmentEngineTests: XCTestCase {
             notes: [note(at: 1.0)] + (2...41).map { note(at: TimeInterval($0)) }
         )
 
-        _ = engine.advance(to: 1.151)
+        _ = engine.advance(to: 1.171)
         XCTAssertEqual(engine.life, 95)
 
         for time in 2...18 {
