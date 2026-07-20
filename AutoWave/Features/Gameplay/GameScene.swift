@@ -34,19 +34,16 @@ final class GameScene: SKScene, @unchecked Sendable {
     private final class TapNoteNode: SKNode {
         let note: Note
 
-        private let body = SKShapeNode()
-        private let noteHeight: CGFloat = 22
-        private let cornerRadius: CGFloat = 8
+        static let noteHeight: CGFloat = 22
+        static let texturePadding: CGFloat = 8
+
+        private let body = SKSpriteNode()
 
         var isConsumed = false
 
-        init(note: Note, fillColor: SKColor, strokeColor: SKColor) {
+        init(note: Note) {
             self.note = note
             super.init()
-
-            body.fillColor = fillColor
-            body.strokeColor = strokeColor
-            body.lineWidth = 2
 
             addChild(body)
             zPosition = 3
@@ -56,21 +53,140 @@ final class GameScene: SKScene, @unchecked Sendable {
             fatalError("init(coder:) has not been implemented")
         }
 
-        func updateLayout(laneWidth: CGFloat) {
+        func updateLayout(laneWidth: CGFloat, texture: SKTexture) {
             let noteWidth = laneWidth * 0.62
-            let rect = CGRect(
-                x: -noteWidth / 2,
-                y: -noteHeight / 2,
-                width: noteWidth,
-                height: noteHeight
+            body.texture = texture
+            body.texture?.filteringMode = .linear
+            body.size = CGSize(
+                width: noteWidth + Self.texturePadding * 2,
+                height: Self.noteHeight + Self.texturePadding * 2
             )
-            let path = CGPath(
-                roundedRect: rect,
-                cornerWidth: cornerRadius,
-                cornerHeight: cornerRadius,
-                transform: nil
+        }
+
+        static func makeTexture(fillColor: SKColor, noteSize: CGSize) -> SKTexture {
+            let canvasSize = CGSize(
+                width: noteSize.width + texturePadding * 2,
+                height: noteSize.height + texturePadding * 2
             )
-            body.path = path
+            let format = UIGraphicsImageRendererFormat()
+            format.opaque = false
+            format.scale = 3
+
+            let image = UIGraphicsImageRenderer(size: canvasSize, format: format).image { rendererContext in
+                let context = rendererContext.cgContext
+                let pillRect = CGRect(
+                    x: texturePadding,
+                    y: texturePadding,
+                    width: noteSize.width,
+                    height: noteSize.height
+                )
+                let pillPath = UIBezierPath(
+                    roundedRect: pillRect,
+                    cornerRadius: noteSize.height / 2
+                )
+                let colors = colorComponents(from: fillColor)
+
+                context.saveGState()
+                context.setShadow(
+                    offset: .zero,
+                    blur: 8,
+                    color: fillColor.cgColor
+                )
+                context.setFillColor(fillColor.cgColor)
+                context.addPath(pillPath.cgPath)
+                context.fillPath()
+                context.restoreGState()
+
+                let bodyGradient = CGGradient(
+                    colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                    colors: [
+                        shade(colors, by: 0.55).cgColor,
+                        fillColor.cgColor,
+                        shade(colors, by: -0.42).cgColor
+                    ] as CFArray,
+                    locations: [0, 0.5, 1]
+                )!
+                context.saveGState()
+                context.addPath(pillPath.cgPath)
+                context.clip()
+                context.drawLinearGradient(
+                    bodyGradient,
+                    start: CGPoint(x: pillRect.midX, y: pillRect.minY),
+                    end: CGPoint(x: pillRect.midX, y: pillRect.maxY),
+                    options: []
+                )
+                context.restoreGState()
+
+                let highlightHeight = noteSize.height * 0.30
+                let highlightInset = noteSize.width * 0.13
+                let highlightRect = CGRect(
+                    x: pillRect.minX + highlightInset,
+                    y: pillRect.minY + noteSize.height * 0.12,
+                    width: noteSize.width - highlightInset * 2,
+                    height: highlightHeight
+                )
+                let highlightPath = UIBezierPath(
+                    roundedRect: highlightRect,
+                    cornerRadius: highlightHeight / 2
+                )
+                let highlightGradient = CGGradient(
+                    colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                    colors: [
+                        UIColor.white.withAlphaComponent(0.55).cgColor,
+                        UIColor.white.withAlphaComponent(0).cgColor
+                    ] as CFArray,
+                    locations: [0, 1]
+                )!
+                context.saveGState()
+                context.addPath(highlightPath.cgPath)
+                context.clip()
+                context.drawLinearGradient(
+                    highlightGradient,
+                    start: CGPoint(x: highlightRect.midX, y: highlightRect.minY),
+                    end: CGPoint(x: highlightRect.midX, y: highlightRect.maxY),
+                    options: []
+                )
+                context.restoreGState()
+
+                context.setStrokeColor(UIColor.white.withAlphaComponent(0.75).cgColor)
+                context.setLineWidth(1.5)
+                context.addPath(pillPath.cgPath)
+                context.strokePath()
+            }
+            return SKTexture(image: image)
+        }
+
+        private static func colorComponents(from color: SKColor) -> (CGFloat, CGFloat, CGFloat) {
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var alpha: CGFloat = 0
+            guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+                return (1, 1, 1)
+            }
+            return (red, green, blue)
+        }
+
+        private static func shade(
+            _ components: (CGFloat, CGFloat, CGFloat),
+            by amount: CGFloat
+        ) -> UIColor {
+            if amount >= 0 {
+                return UIColor(
+                    red: components.0 + (1 - components.0) * amount,
+                    green: components.1 + (1 - components.1) * amount,
+                    blue: components.2 + (1 - components.2) * amount,
+                    alpha: 1
+                )
+            }
+
+            let scale = 1 + amount
+            return UIColor(
+                red: components.0 * scale,
+                green: components.1 * scale,
+                blue: components.2 * scale,
+                alpha: 1
+            )
         }
 
         func update(
@@ -96,7 +212,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 return
             }
 
-            let halfNoteHeight = noteHeight * scale * 0.5
+            let halfNoteHeight = Self.noteHeight * scale * 0.5
             guard point.y <= sceneHeight + halfNoteHeight, point.y >= -halfNoteHeight else {
                 isHidden = true
                 return
@@ -647,6 +763,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let noteSpeedState: NoteSpeedMultiplierState
     private let laneCount: Int
     private let completionFallbackTime: TimeInterval
+    private let tapNoteTextureCache = NSCache<NSString, SKTexture>()
 
     private var noteNodes: [TapNoteNode] = []
     private var ribbonNodes: [RibbonNode] = []
@@ -833,9 +950,7 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         for note in beatmap.notes where note.kind == .tap {
             let node = TapNoteNode(
-                note: note,
-                fillColor: tapNoteColor,
-                strokeColor: tapNoteStrokeColor
+                note: note
             )
             noteNodes.append(node)
             addChild(node)
@@ -1317,7 +1432,10 @@ final class GameScene: SKScene, @unchecked Sendable {
         )
 
         for node in noteNodes {
-            node.updateLayout(laneWidth: laneWidth)
+            node.updateLayout(
+                laneWidth: laneWidth,
+                texture: tapNoteTexture(for: laneWidth)
+            )
         }
         for node in ribbonNodes {
             node.updateLayout(
@@ -1336,6 +1454,25 @@ final class GameScene: SKScene, @unchecked Sendable {
 
     private var currentScrollSpeed: CGFloat {
         scrollSpeed * scrollSpeedMultiplier
+    }
+
+    private func tapNoteTexture(for laneWidth: CGFloat) -> SKTexture {
+        let noteWidth = laneWidth * 0.62
+        let widthClass = max(Int((noteWidth * 2).rounded()), 1)
+        let key = "tapNote:\(widthClass)" as NSString
+        if let texture = tapNoteTextureCache.object(forKey: key) {
+            return texture
+        }
+
+        let texture = TapNoteNode.makeTexture(
+            fillColor: tapNoteColor,
+            noteSize: CGSize(
+                width: CGFloat(widthClass) / 2,
+                height: TapNoteNode.noteHeight
+            )
+        )
+        tapNoteTextureCache.setObject(texture, forKey: key)
+        return texture
     }
 
     private func updatePanel(
