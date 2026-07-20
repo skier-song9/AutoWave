@@ -643,97 +643,140 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
     }
 
-    private final class HitPopNode: SKNode {
-        private let ring = SKShapeNode()
-        private let particles: [SKShapeNode]
-        private let directions: [CGVector]
-        private var age: TimeInterval = 0
-        private var intensity: CGFloat = 1
-        private var isActive = false
+    private final class LaneHitEffectNode: SKNode {
+        private static let beamStripCount = 10
 
-        init(color: SKColor) {
-            directions = (0..<6).map { index in
-                let angle = Double(index) * .pi / 3
-                return CGVector(dx: CGFloat(cos(angle)), dy: CGFloat(sin(angle)))
-            }
-            particles = (0..<6).map { _ in
-                let particle = SKShapeNode(circleOfRadius: 2)
-                particle.fillColor = color
-                particle.strokeColor = .clear
-                particle.isHidden = true
-                return particle
-            }
+        private let lane: Int
+        private let contentNode = SKNode()
+        private let beamCropNode = SKCropNode()
+        private let beamMaskNode = SKShapeNode()
+        private let beamContainer = SKNode()
+        private let beamStrips: [SKShapeNode]
+        private let burstNode = SKNode()
+        private let burstOuter = SKShapeNode(circleOfRadius: 1)
+        private let burstMid = SKShapeNode(circleOfRadius: 0.62)
+        private let burstCore = SKShapeNode(circleOfRadius: 0.16)
+        private let ring = SKShapeNode(circleOfRadius: 1)
+        private var color: SKColor
+        private var laneWidth: CGFloat = 0
+
+        init(lane: Int, color: SKColor) {
+            self.lane = lane
+            self.color = color
+            beamStrips = (0..<Self.beamStripCount).map { _ in SKShapeNode() }
             super.init()
 
-            ring.fillColor = color.withAlphaComponent(0.12)
-            ring.strokeColor = color
-            ring.lineWidth = 2
-            addChild(ring)
-            for particle in particles {
-                addChild(particle)
+            beamMaskNode.fillColor = .white
+            beamMaskNode.strokeColor = .clear
+            beamCropNode.maskNode = beamMaskNode
+            beamCropNode.addChild(beamContainer)
+            contentNode.addChild(beamCropNode)
+
+            for strip in beamStrips {
+                strip.strokeColor = .clear
+                strip.blendMode = .add
+                beamContainer.addChild(strip)
             }
-            zPosition = 8
+
+            burstOuter.strokeColor = .clear
+            burstMid.strokeColor = .clear
+            burstCore.strokeColor = .clear
+            for burst in [burstOuter, burstMid, burstCore] {
+                burst.blendMode = .add
+                burstNode.addChild(burst)
+            }
+            contentNode.addChild(burstNode)
+
+            ring.fillColor = .clear
+            ring.lineWidth = 2.5
+            ring.blendMode = .add
+            contentNode.addChild(ring)
+            addChild(contentNode)
+
+            zPosition = 4
             isHidden = true
+            updateColors(color)
         }
 
         required init?(coder aDecoder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
         }
 
-        func updateLayout(noteWidth: CGFloat) {
-            ring.path = CGPath(
-                roundedRect: CGRect(
-                    x: -noteWidth / 2,
-                    y: -11,
-                    width: noteWidth,
-                    height: 22
-                ),
-                cornerWidth: 8,
-                cornerHeight: 8,
-                transform: nil
-            )
-        }
+        func updateLayout(projection: PerspectiveProjection) {
+            position = projection.point(lane: Double(lane), at: 1)
+            laneWidth = projection.laneWidth(at: 1)
 
-        func trigger(at point: CGPoint, intensity: CGFloat) {
-            self.intensity = intensity
-            age = 0
-            isActive = true
-            isHidden = false
-            position = point
-            ring.alpha = 1
-            ring.setScale(1)
-            for particle in particles {
-                particle.position = .zero
-                particle.alpha = 1
-                particle.setScale(1)
-                particle.isHidden = false
-            }
-        }
+            let topY = projection.y(at: 0) - position.y
+            let topLeftX = projection.laneBoundaryX(lane, at: 0) - position.x
+            let topRightX = projection.laneBoundaryX(lane + 1, at: 0) - position.x
+            let bottomLeftX = projection.laneBoundaryX(lane, at: 1) - position.x
+            let bottomRightX = projection.laneBoundaryX(lane + 1, at: 1) - position.x
+            let maskPath = CGMutablePath()
+            maskPath.move(to: CGPoint(x: topLeftX, y: topY))
+            maskPath.addLine(to: CGPoint(x: topRightX, y: topY))
+            maskPath.addLine(to: CGPoint(x: bottomRightX, y: 0))
+            maskPath.addLine(to: CGPoint(x: bottomLeftX, y: 0))
+            maskPath.closeSubpath()
+            beamMaskNode.path = maskPath
 
-        func update(delta: TimeInterval) {
-            guard isActive else { return }
-
-            age += delta
-            let progress = min(max(age / 0.32, 0), 1)
-            let fade = CGFloat(1 - progress)
-            ring.setScale(1 + 2.4 * CGFloat(progress) * intensity)
-            ring.alpha = fade
-
-            let distance = 34 * CGFloat(progress)
-            for index in particles.indices {
-                let direction = directions[index]
-                particles[index].position = CGPoint(
-                    x: direction.dx * distance,
-                    y: direction.dy * distance
+            let beamHeight = projection.travelHeight * 0.42
+            let stripWidth = laneWidth * 2.4
+            for index in beamStrips.indices {
+                let lower = beamHeight * CGFloat(index) / CGFloat(Self.beamStripCount)
+                let upper = beamHeight * CGFloat(index + 1) / CGFloat(Self.beamStripCount)
+                beamStrips[index].path = CGPath(
+                    rect: CGRect(
+                        x: -stripWidth / 2,
+                        y: lower,
+                        width: stripWidth,
+                        height: upper - lower + 0.5
+                    ),
+                    transform: nil
                 )
-                particles[index].alpha = fade
+            }
+            updateColors(color)
+        }
+
+        func trigger(at point: CGPoint, color: SKColor) {
+            self.color = color
+            updateColors(color)
+            position = point
+            isHidden = false
+            contentNode.removeAllActions()
+            burstNode.removeAllActions()
+            ring.removeAllActions()
+            contentNode.alpha = 1
+            burstNode.setScale(laneWidth * 0.75)
+            ring.setScale(laneWidth * 0.38)
+
+            let duration: TimeInterval = 0.25
+            let fade = SKAction.fadeAlpha(to: 0, duration: duration)
+            fade.timingMode = .linear
+            let burstExpansion = SKAction.scale(to: laneWidth * 1.45, duration: duration)
+            burstExpansion.timingMode = .linear
+            let ringExpansion = SKAction.scale(to: laneWidth * 1.10, duration: duration)
+            ringExpansion.timingMode = .linear
+            contentNode.run(fade)
+            burstNode.run(burstExpansion)
+            ring.run(ringExpansion)
+        }
+
+        private func updateColors(_ color: SKColor) {
+            for index in beamStrips.indices {
+                let progress = CGFloat(index) / CGFloat(Self.beamStripCount - 1)
+                if progress < 0.25 {
+                    let alpha = 0.92 - progress * 1.2
+                    beamStrips[index].fillColor = SKColor.white.withAlphaComponent(alpha)
+                } else {
+                    let alpha = 0.28 * (1 - progress) / 0.75
+                    beamStrips[index].fillColor = color.withAlphaComponent(alpha)
+                }
             }
 
-            guard progress < 1 else {
-                isActive = false
-                isHidden = true
-                return
-            }
+            burstOuter.fillColor = color.withAlphaComponent(0.08)
+            burstMid.fillColor = color.withAlphaComponent(0.38)
+            burstCore.fillColor = SKColor.white.withAlphaComponent(0.94)
+            ring.strokeColor = color
         }
     }
 
@@ -769,11 +812,12 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var ribbonNodes: [RibbonNode] = []
     private var gradientNodes: [SKSpriteNode] = []
     private var laneFillNodes: [SKShapeNode] = []
+    private var lanePressNodes: [SKShapeNode] = []
+    private var laneHitEffectNodes: [LaneHitEffectNode] = []
     private var boundaryNodes: [SKShapeNode] = []
     private var receptorNodes: [SKShapeNode] = []
     private var lifeSegmentNodes: [SKShapeNode] = []
     private var receptorFlashRemaining: [TimeInterval] = []
-    private var hitPopNodes: [HitPopNode] = []
     private var rippleNodes: [SKShapeNode] = []
     private var rippleStates = Array(repeating: RippleState(), count: 6)
     private let backgroundOverlayNode = SKShapeNode()
@@ -818,7 +862,6 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var activeDragTouchLane: Double?
     private var nextDragTickTime: TimeInterval?
     private let dragTickInterval: TimeInterval = 0.1
-    private var nextHitPopIndex = 0
     private var lastRenderedCombo: Int?
     private var lastRenderedScore: Int?
     private var lastRenderedLife: Int?
@@ -924,6 +967,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             laneFillNodes.append(lane)
             addChild(lane)
 
+            let press = SKShapeNode()
+            press.fillColor = judgmentAccentColor
+            press.strokeColor = .clear
+            press.blendMode = .add
+            press.zPosition = -2.5
+            press.isHidden = true
+            lanePressNodes.append(press)
+            addChild(press)
+
+            let hitEffect = LaneHitEffectNode(lane: laneFillNodes.count - 1, color: judgmentAccentColor)
+            laneHitEffectNodes.append(hitEffect)
+            addChild(hitEffect)
+
             let receptor = SKShapeNode()
             receptor.fillColor = .clear
             receptor.strokeColor = laneLineColor
@@ -940,12 +996,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             boundary.zPosition = 1
             boundaryNodes.append(boundary)
             addChild(boundary)
-        }
-
-        for _ in 0..<8 {
-            let hitPop = HitPopNode(color: judgmentAccentColor)
-            hitPopNodes.append(hitPop)
-            addChild(hitPop)
         }
 
         for note in beatmap.notes where note.kind == .tap {
@@ -1168,6 +1218,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             guard let touchLane = laneCoordinate(for: touch.location(in: self)) else {
                 continue
             }
+            let touchLaneIndex = laneIndex(for: touchLane)
+            flashLane(touchLaneIndex)
 
             if activeDragNoteID == nil,
                let ribbon = nearestRibbon(at: time, touchLane: touchLane),
@@ -1184,12 +1236,12 @@ final class GameScene: SKScene, @unchecked Sendable {
                 flashReceptor(lane)
                 showJudgment(result, at: CACurrentMediaTime())
                 if result.judgment != .miss {
-                    showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
+                    showHitEffect(at: lane, judgment: result.judgment)
                 }
                 continue
             }
 
-            let lane = laneIndex(for: touchLane)
+            let lane = touchLaneIndex
 
             guard let result = judgmentEngine.tap(lane: lane, at: time) else { continue }
 
@@ -1197,7 +1249,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             showJudgment(result, at: CACurrentMediaTime())
             if result.judgment != .miss {
                 flashReceptor(lane)
-                showHitPop(at: receptorPoint(for: lane), judgment: result.judgment)
+                showHitEffect(at: lane, judgment: result.judgment)
             }
         }
     }
@@ -1298,6 +1350,9 @@ final class GameScene: SKScene, @unchecked Sendable {
             lane.alpha = index.isMultiple(of: 2)
                 ? CGFloat(theme.laneFillAlpha)
                 : CGFloat(theme.laneFillAlpha * 0.6)
+            lanePressNodes[index].path = path
+            lanePressNodes[index].fillColor = judgmentAccentColor
+            laneHitEffectNodes[index].updateLayout(projection: projection)
         }
 
         let hitLinePath = CGMutablePath()
@@ -1444,9 +1499,6 @@ final class GameScene: SKScene, @unchecked Sendable {
                 sceneHeight: size.height
             )
         }
-        for node in hitPopNodes {
-            node.updateLayout(noteWidth: laneWidth * 0.62)
-        }
 
         lastRenderedLife = nil
         updateHUD()
@@ -1507,9 +1559,6 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         updateReceptorFlashes(delta: delta)
-        for hitPop in hitPopNodes {
-            hitPop.update(delta: delta)
-        }
 
         let bass = bandMean(visualizerBands, from: 0, to: 4)
         let mid = bandMean(visualizerBands, from: 4, to: 10)
@@ -1783,23 +1832,26 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
     }
 
-    private func showHitPop(at point: CGPoint, judgment: Judgment) {
-        guard !hitPopNodes.isEmpty else { return }
+    private func flashLane(_ lane: Int) {
+        guard lanePressNodes.indices.contains(lane) else { return }
 
-        let intensity: CGFloat
-        switch judgment {
-        case .perfect:
-            intensity = 1
-        case .great:
-            intensity = 0.86
-        case .good:
-            intensity = 0.7
-        case .bad, .miss:
-            intensity = 0.55
-        }
+        let node = lanePressNodes[lane]
+        node.removeAllActions()
+        node.isHidden = false
+        node.alpha = 0.30
+        let fade = SKAction.fadeAlpha(to: 0, duration: 0.18)
+        fade.timingMode = .linear
+        node.run(fade)
+    }
 
-        hitPopNodes[nextHitPopIndex].trigger(at: point, intensity: intensity)
-        nextHitPopIndex = (nextHitPopIndex + 1) % hitPopNodes.count
+    private func showHitEffect(at lane: Int, judgment: Judgment) {
+        guard judgment != .miss,
+              laneHitEffectNodes.indices.contains(lane) else { return }
+
+        laneHitEffectNodes[lane].trigger(
+            at: receptorPoint(for: lane),
+            color: judgmentColor(for: judgment)
+        )
     }
 
     private func updateHUD() {
