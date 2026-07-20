@@ -55,6 +55,7 @@ struct GameplayContainerView: View {
         .navigationTitle("게임")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $summary) { result in
             if let track, let difficulty {
                 ResultsView(
@@ -207,8 +208,8 @@ private struct GameplaySessionView: View {
                         speedControl
                         pauseButton
                     }
-                    .padding(.top, 18)
-                    .padding(.trailing, 18)
+                    .safeAreaPadding(.top, 18)
+                    .safeAreaPadding(.trailing, 18)
                     .zIndex(20)
                     .allowsHitTesting(true)
                 }
