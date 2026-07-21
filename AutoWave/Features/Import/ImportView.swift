@@ -14,11 +14,11 @@ struct ImportView: View {
         VStack(spacing: 20) {
             if isImporting {
                 ProgressView("음원 가져오는 중…")
-                    .tint(AppTheme.accent)
+                    .tint(AppTheme.accentPurple)
             } else if let importedTrack {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(AppTheme.good)
+                    .foregroundStyle(AppTheme.green)
                 Text("가져오기 완료")
                     .font(.headline)
                 Text(importedTrack.title)
@@ -26,36 +26,42 @@ struct ImportView: View {
                 Button("라이브러리로 돌아가기") {
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GradientCTAButtonStyle())
             } else {
-                Button {
-                    isImporterPresented = true
-                } label: {
-                    VStack(spacing: 12) {
-                        Image(systemName: "waveform.badge.plus")
-                            .font(.system(size: 40))
-                            .foregroundStyle(AppTheme.accentGradient)
-                        Text("음원 파일 선택")
-                            .font(.headline)
-                        Text("mp3 · m4a · wav")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.muted)
+                VStack(spacing: 12) {
+                    Image(systemName: "waveform.badge.plus")
+                        .font(.system(size: 40))
+                        .foregroundStyle(AppTheme.accentGradient)
+                    Text("음원 파일 선택")
+                        .font(.headline)
+                    Text("mp3 · m4a · wav")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                    Button("파일 열기") {
+                        isImporterPresented = true
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 44)
-                    .background(
-                        AppTheme.panel,
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .strokeBorder(
-                                AppTheme.accent.opacity(0.55),
-                                style: StrokeStyle(lineWidth: 1.5, dash: [7, 6])
-                            )
-                    }
+                    .buttonStyle(GradientCTAButtonStyle())
+                    .padding(.top, 4)
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 34)
+                .padding(.horizontal, 30)
+                .background(
+                    LinearGradient(
+                        colors: [AppTheme.panel, AppTheme.backgroundElevated],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(
+                            AppTheme.accentGradient,
+                            style: StrokeStyle(lineWidth: 1.5, dash: [7, 6])
+                        )
+                }
+                .shadow(color: AppTheme.accentPurple.opacity(0.45), radius: 22)
             }
         }
         .padding()

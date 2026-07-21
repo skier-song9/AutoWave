@@ -27,7 +27,7 @@ struct LibraryView: View {
                     } label: {
                         Text("음원 가져오기")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(GradientCTAButtonStyle())
                 }
             } else {
                 List {
@@ -56,10 +56,10 @@ struct LibraryView: View {
                             }
                         }
                         .listRowBackground(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(AppTheme.panel)
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                                         .strokeBorder(AppTheme.line, lineWidth: 1)
                                 }
                                 .padding(.vertical, 4)
@@ -228,7 +228,7 @@ private struct TrackRow: View {
                     Spacer()
                     Text(formattedDuration(track.duration))
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(AppTheme.muted)
                 }
 
                 HStack(spacing: 6) {
@@ -240,11 +240,12 @@ private struct TrackRow: View {
                     ) { difficulty in
                         Text(difficulty.displayName)
                             .font(.caption2)
+                            .foregroundStyle(difficulty.tint)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(trackColor.opacity(0.15), in: Capsule())
+                            .background(difficulty.tint.opacity(0.15), in: Capsule())
                             .overlay {
-                                Capsule().strokeBorder(trackColor.opacity(0.4), lineWidth: 0.5)
+                                Capsule().strokeBorder(difficulty.tint.opacity(0.54), lineWidth: 1)
                             }
                     }
                 }
@@ -259,7 +260,7 @@ private struct TrackRow: View {
                   Beatmap.self,
                   from: beatmapEntity.beatmapData
               ) else {
-            return .accentColor
+            return AppTheme.accentPurple
         }
         return beatmap.palette.color
     }
@@ -283,7 +284,6 @@ private struct ReadySheetView: View {
     @State private var selectedDifficulty: Difficulty
     @State private var laneCount = 4
     @State private var speedStateRevision = 0
-    @State private var speedFlash = false
     @State private var isStarting = false
     @State private var errorMessage: String?
     @State private var viewModel = AnalysisViewModel()
@@ -302,73 +302,34 @@ private struct ReadySheetView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("준비")
-                            .font(.largeTitle.bold())
-                        Text(track.title)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
+        ZStack {
+            AppTheme.background
+                .ignoresSafeArea()
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("난이도")
-                            .font(.headline)
-                        Picker("난이도", selection: $selectedDifficulty) {
-                            ForEach(Difficulty.allCases, id: \.rawValue) { difficulty in
-                                Text(difficulty.displayName).tag(difficulty)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                    }
-
-                    settingRow(title: "레인 수") {
-                        Stepper("\(laneCount)", value: $laneCount, in: 4...7)
-                            .labelsHidden()
-                        Text("\(laneCount)")
-                            .font(.title3.monospacedDigit())
-                            .frame(minWidth: 28)
-                    }
-
-                    settingRow(title: "배속") {
-                        Button {
-                            cycleSpeed()
-                        } label: {
-                            Text(speedLabel(Double(speedState.value)))
-                                .font(.headline.monospacedDigit())
-                                .frame(minWidth: 86)
-                                .id(speedStateRevision)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .scaleEffect(speedFlash ? 1.08 : 1)
-                        .animation(.easeOut(duration: 0.16), value: speedFlash)
-                    }
-
-                    if isStarting {
-                        ProgressView("비트맵 준비 중…")
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Button("시작") {
-                            startGame()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .frame(maxWidth: .infinity)
-                    }
+            ScrollView([.horizontal, .vertical], showsIndicators: false) {
+                HStack(alignment: .top, spacing: 22) {
+                    albumPanel
+                        .frame(width: 260)
+                    settingsColumn
+                        .frame(minWidth: 560, maxWidth: 760)
                 }
                 .padding(24)
-                .frame(maxWidth: 720)
-                .frame(maxWidth: .infinity)
-            }
-            .appScreenBackground()
-            .navigationTitle("준비")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("닫기") { dismiss() }
+                .frame(maxWidth: 1_100, minHeight: 380)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AppTheme.backgroundElevated, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(AppTheme.accentGradient, lineWidth: 1.5)
                 }
+                .shadow(color: AppTheme.accentPurple.opacity(0.34), radius: 32)
+                .shadow(color: AppTheme.accentBlue.opacity(0.18), radius: 42)
+                .overlay(alignment: .topTrailing) {
+                    CircleIconButton(systemName: "xmark", compact: true) {
+                        dismiss()
+                    }
+                    .padding(14)
+                }
+                .padding(24)
             }
         }
         .task {
@@ -393,24 +354,214 @@ private struct ReadySheetView: View {
         }
     }
 
-    private func settingRow<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        HStack {
-            Text(title)
-                .font(.headline)
-            Spacer()
-            content()
+    private var albumPanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [trackColor, AppTheme.accentPurple, AppTheme.background],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay {
+                    Circle()
+                        .stroke(AppTheme.text.opacity(0.18), lineWidth: 1)
+                        .padding(18)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppTheme.text)
+                        .frame(width: 42, height: 42)
+                        .background(AppTheme.backgroundElevated, in: Circle())
+                        .overlay {
+                            Circle()
+                                .strokeBorder(AppTheme.accentGradient, lineWidth: 2)
+                        }
+                        .padding(12)
+                }
+                .frame(height: 190)
+                .shadow(color: AppTheme.accentPurple.opacity(0.35), radius: 14)
+
+            Text(track.title)
+                .font(.title3.weight(.bold))
+                .lineLimit(2)
+                .padding(.top, 16)
+            Text(formattedDuration(track.duration))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(AppTheme.mutedBright)
+                .padding(.top, 4)
+        }
+        .padding(12)
+        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(AppTheme.line, lineWidth: 1)
         }
     }
 
-    private func cycleSpeed() {
-        let next = Double(speedState.cycle())
+    private var settingsColumn: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            settingsPanel(title: "난이도") {
+                HStack(spacing: 8) {
+                    ForEach(Difficulty.allCases, id: \.rawValue) { difficulty in
+                        difficultyCard(difficulty)
+                    }
+                }
+            }
+
+            settingsPanel {
+                settingCopy(
+                    title: "LANE 개수",
+                    caption: "노트가 떨어지는 라인의 개수를 설정합니다."
+                )
+                Spacer(minLength: 8)
+                HStack(spacing: 7) {
+                    ForEach(4...7, id: \.self) { value in
+                        optionChip("\(value)", selected: laneCount == value, size: 72) {
+                            laneCount = value
+                        }
+                    }
+                }
+            }
+
+            settingsPanel {
+                settingCopy(
+                    title: "배속",
+                    caption: "게임 속도를 설정합니다."
+                )
+                Spacer(minLength: 8)
+                HStack(spacing: 7) {
+                    ForEach(NoteSpeedMultiplierState.allowedValues, id: \.self) { value in
+                        optionChip(
+                            speedLabel(Double(value)),
+                            selected: abs(Double(speedState.value) - Double(value)) < 0.000_001,
+                            size: 64
+                        ) {
+                            selectSpeed(Double(value))
+                        }
+                    }
+                }
+            }
+            .id(speedStateRevision)
+
+            if isStarting {
+                ProgressView("비트맵 준비 중…")
+                    .tint(AppTheme.accentPurple)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            } else {
+                Button {
+                    startGame()
+                } label: {
+                    Label("START", systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(GradientCTAButtonStyle())
+            }
+        }
+    }
+
+    private func settingsPanel<Content: View>(
+        title: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let title {
+                Text(title)
+                    .font(.headline)
+            }
+            content()
+        }
+        .padding(14)
+        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(AppTheme.line, lineWidth: 1)
+        }
+    }
+
+    private func settingCopy(title: String, caption: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.headline)
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
+        }
+    }
+
+    private func difficultyCard(_ difficulty: Difficulty) -> some View {
+        let isSelected = selectedDifficulty == difficulty
+
+        return Button {
+            selectedDifficulty = difficulty
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: difficulty.iconSystemName)
+                    .font(.title2)
+                    .foregroundStyle(difficulty.tint)
+                    .shadow(color: difficulty.tint, radius: 10)
+                Text(difficulty.displayName)
+                    .font(.caption.weight(.bold))
+                Text(difficulty.levelLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(AppTheme.mutedBright)
+            }
+            .frame(maxWidth: .infinity, minHeight: 96)
+        }
+        .buttonStyle(.plain)
+        .background(
+            isSelected ? AppTheme.accentPurple.opacity(0.16) : difficulty.tint.opacity(0.09),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    isSelected ? AppTheme.accentPurple : difficulty.tint.opacity(0.54),
+                    lineWidth: isSelected ? 2 : 1
+                )
+        }
+        .shadow(
+            color: isSelected ? AppTheme.accentPurple.opacity(0.55) : .clear,
+            radius: isSelected ? 26 : 0
+        )
+        .scaleEffect(isSelected ? 1.02 : 1)
+        .animation(.easeOut(duration: 0.16), value: isSelected)
+    }
+
+    private func optionChip(
+        _ title: String,
+        selected: Bool,
+        size: CGFloat,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(selected ? .white : AppTheme.mutedBright)
+                .frame(width: size, height: size)
+                .background(AppTheme.backgroundElevated, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            selected ? AppTheme.accentPurple : AppTheme.muted.opacity(0.42),
+                            lineWidth: selected ? 3 : 1
+                        )
+                }
+                .shadow(
+                    color: selected ? AppTheme.accentPurple.opacity(0.45) : .clear,
+                    radius: selected ? 22 : 0
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func selectSpeed(_ value: Double) {
+        speedState.set(CGFloat(value))
         speedStateRevision &+= 1
-        flashSpeedControl()
         let profile = ProfileEntity.current(in: modelContext)
-        profile.noteSpeedMultiplier = next
+        profile.noteSpeedMultiplier = value
         do {
             try modelContext.save()
         } catch {
@@ -418,16 +569,25 @@ private struct ReadySheetView: View {
         }
     }
 
-    private func flashSpeedControl() {
-        withAnimation(.easeOut(duration: 0.12)) {
-            speedFlash = true
+    private var trackColor: Color {
+        guard let beatmapEntity = track.beatmaps.first,
+              let beatmap = try? JSONDecoder().decode(
+                  Beatmap.self,
+                  from: beatmapEntity.beatmapData
+              ) else {
+            return AppTheme.accentPurple
         }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            withAnimation(.easeOut(duration: 0.22)) {
-                speedFlash = false
-            }
-        }
+        return beatmap.palette.color
+    }
+
+    private func formattedDuration(_ duration: TimeInterval) -> String {
+        let totalSeconds = max(Int(duration.rounded()), 0)
+        return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private func speedLabel(_ value: Double) -> String {
+        String(format: "x%.2f", value)
+            .replacingOccurrences(of: "0$", with: "", options: .regularExpression)
     }
 
     private func startGame() {
@@ -482,25 +642,4 @@ private struct ReadySheetView: View {
         }
     }
 
-    private func speedLabel(_ value: Double) -> String {
-        String(format: "x%.2f", value)
-            .replacingOccurrences(of: "0$", with: "", options: .regularExpression)
-    }
-}
-
-private extension Difficulty {
-    var tint: Color {
-        switch self {
-        case .heaven:
-            .cyan
-        case .easy:
-            .green
-        case .normal:
-            .blue
-        case .hard:
-            .orange
-        case .hell:
-            .red
-        }
-    }
 }

@@ -49,7 +49,7 @@ struct GameplayContainerView: View {
                 .ignoresSafeArea()
             } else {
                 Text("게임을 시작할 음원을 선택해 주세요.")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.muted)
             }
         }
         .navigationTitle("게임")
@@ -145,23 +145,23 @@ private struct GameplaySessionView: View {
         Group {
             switch viewModel.state {
             case .idle:
-                Color.black
+                AppTheme.background
             case .ready:
                 gameplayContent
             case .failed(let message):
                 VStack(spacing: 16) {
                     Text(message)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.text)
                     Text("라이브러리로 돌아가 다시 시도해 주세요.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(AppTheme.mutedBright)
                     Button("라이브러리로", action: onExit)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(GradientCTAButtonStyle())
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black)
+                .background(AppTheme.background)
             case .completed:
-                Color.black
+                AppTheme.background
             }
         }
         .task {
@@ -221,42 +221,30 @@ private struct GameplaySessionView: View {
             }
             .background(InteractivePopGestureBlocker().allowsHitTesting(false))
         } else {
-            Color.black
+            AppTheme.background
         }
     }
 
     private var pauseButton: some View {
-        Button {
+        CircleIconButton(systemName: "pause.fill", compact: true) {
             pauseGame()
-        } label: {
-            Image(systemName: "pause.fill")
-                .font(.headline)
-                .padding(12)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.black.opacity(0.65))
         .accessibilityLabel("일시정지")
         .contentShape(Rectangle())
         .frame(width: 72, height: 72)
     }
 
     private var speedControl: some View {
-        Button {
+        CircleIconButton(systemName: "speedometer", compact: true) {
             cycleSpeed()
-        } label: {
-            Label("배속 \(speedLabel(viewModel.noteSpeedMultiplier))", systemImage: "speedometer")
-                .font(.headline)
-                .padding(12)
-                .id(viewModel.speedStateRevision)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.black.opacity(0.65))
         .accessibilityLabel("노트 배속 변경")
-        .frame(minWidth: 132, minHeight: 56)
+        .accessibilityValue(speedLabel(viewModel.noteSpeedMultiplier))
+        .frame(width: 72, height: 72)
         .contentShape(Rectangle())
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(speedFlash ? Color.yellow.opacity(0.75) : Color.clear)
+            Circle()
+                .fill(speedFlash ? AppTheme.accentPurple.opacity(0.28) : Color.clear)
         )
         .scaleEffect(speedFlash ? 1.08 : 1)
         .animation(.easeOut(duration: 0.16), value: speedFlash)
@@ -266,7 +254,7 @@ private struct GameplaySessionView: View {
 
     private var pauseOverlay: some View {
         ZStack {
-            Color.black.opacity(0.72)
+            AppTheme.background.opacity(0.68)
                 .ignoresSafeArea()
 
             VStack(spacing: 22) {
@@ -274,7 +262,7 @@ private struct GameplaySessionView: View {
                     Text("\(countdown)")
                         .font(.system(size: 88, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.text)
                         .accessibilityLabel("\(countdown)초 후 재개")
                 } else {
                     Text("일시정지")
@@ -284,17 +272,28 @@ private struct GameplaySessionView: View {
                         Button("계속하기") {
                             viewModel.resume()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(GradientCTAButtonStyle())
+                        .frame(maxWidth: .infinity)
 
                         Button("다시하기", action: onRestart)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(GradientCTAButtonStyle(secondary: true))
+                            .frame(maxWidth: .infinity)
 
                         Button("나가기", action: onExit)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(GradientCTAButtonStyle(secondary: true))
+                            .frame(maxWidth: .infinity)
                     }
                 }
             }
-            .foregroundStyle(.white)
+            .padding(24)
+            .frame(maxWidth: 340)
+            .background(AppTheme.backgroundElevated, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(AppTheme.accentGradient, lineWidth: 1.5)
+            }
+            .shadow(color: AppTheme.accentPurple.opacity(0.45), radius: 22)
+            .foregroundStyle(AppTheme.text)
         }
     }
 

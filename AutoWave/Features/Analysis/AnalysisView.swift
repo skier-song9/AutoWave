@@ -6,20 +6,17 @@ struct AnalysisView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel: AnalysisViewModel
-    @State private var generatedPalette: ThemePalette?
 
     private let track: TrackEntity?
 
     init() {
         track = nil
         _viewModel = State(initialValue: AnalysisViewModel())
-        _generatedPalette = State(initialValue: nil)
     }
 
     init(track: TrackEntity) {
         self.track = track
         _viewModel = State(initialValue: AnalysisViewModel())
-        _generatedPalette = State(initialValue: nil)
     }
 
     var body: some View {
@@ -38,7 +35,6 @@ struct AnalysisView: View {
         .task(id: track?.persistentModelID) {
             guard let track else { return }
             await viewModel.start(track: track, context: modelContext)
-            generatedPalette = palette(for: track)
         }
     }
 
@@ -61,7 +57,7 @@ struct AnalysisView: View {
             )
         case .done:
             VStack(spacing: 24) {
-                RippleProgressView(progress: 1, tint: generatedPalette?.color ?? AppTheme.accent)
+                RippleProgressView(progress: 1, tint: AppTheme.accentPurple)
                     .frame(width: 140, height: 140)
                 Text("완료!")
                     .font(.largeTitle.bold())
@@ -71,7 +67,7 @@ struct AnalysisView: View {
                 Button("라이브러리로") {
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GradientCTAButtonStyle())
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding()
@@ -80,13 +76,11 @@ struct AnalysisView: View {
                 Text(message)
                     .font(.headline)
                 Button("다시 시도") {
-                    generatedPalette = nil
                     Task { @MainActor in
                         await viewModel.start(track: track, context: modelContext)
-                        generatedPalette = palette(for: track)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(GradientCTAButtonStyle(secondary: true))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding()
@@ -97,32 +91,45 @@ struct AnalysisView: View {
         VStack(spacing: 24) {
             RippleProgressView(
                 progress: progress,
-                tint: generatedPalette?.color ?? AppTheme.accent
+                tint: AppTheme.accentPurple
             )
                 .frame(width: 180, height: 180)
             Text(title)
                 .font(.title3.weight(.semibold))
             Text(detail)
                 .font(.headline.monospacedDigit())
-                .foregroundStyle(AppTheme.muted)
+                .foregroundStyle(AppTheme.mutedBright)
+            ProgressTrack(progress: progress)
+                .frame(maxWidth: 260)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
     }
 
-    private func palette(for track: TrackEntity) -> ThemePalette? {
-        guard let beatmap = track.beatmaps.first else { return nil }
-        guard let decoded = try? JSONDecoder().decode(
-            Beatmap.self,
-            from: beatmap.beatmapData
-        ) else {
-            return nil
-        }
-        return decoded.palette
-    }
-
     private func percentage(_ progress: Double) -> Int {
         Int((min(max(progress, 0), 1) * 100).rounded())
+    }
+}
+
+private struct ProgressTrack: View {
+    let progress: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            let clampedProgress = min(max(progress, 0), 1)
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(AppTheme.line)
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 999, style: .continuous)
+                        .fill(AppTheme.accentGradient)
+                        .frame(width: proxy.size.width * clampedProgress)
+                        .shadow(color: AppTheme.accentPurple.opacity(0.45), radius: 10)
+                }
+        }
+        .frame(height: 5)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("분석 진행률")
+        .accessibilityValue("\(Int(min(max(progress, 0), 1) * 100))%")
     }
 }
 

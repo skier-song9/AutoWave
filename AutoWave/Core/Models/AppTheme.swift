@@ -1,21 +1,32 @@
 import SwiftUI
 
-/// App-wide design tokens ported from tools/notegen-playground.html (dark panel language).
+/// App-wide neon-space design tokens.
 enum AppTheme {
-    static let background = Color(hex: 0x0A0D14)
-    static let panel = Color(hex: 0x111722)
-    static let panelSecondary = Color(hex: 0x171E2C)
-    static let line = Color(hex: 0x283247)
-    static let muted = Color(hex: 0x8994A8)
-    static let text = Color(hex: 0xEDF2FF)
-    static let accent = Color(hex: 0x6DDCFF)
-    static let accentSecondary = Color(hex: 0xA98CFF)
-    static let good = Color(hex: 0x63E6AE)
-    static let danger = Color(hex: 0xFF7188)
+    static let background = Color(hex: 0x05060F)
+    static let backgroundElevated = Color(hex: 0x0A0A18)
+    static let panel = Color(hex: 0x12121F)
+    static let panelSoft = Color(hex: 0x17172A)
+    static let line = Color(hex: 0x2A2A45)
+    static let muted = Color(hex: 0x8A8AA8)
+    static let mutedBright = Color(hex: 0xB9B9D6)
+    static let text = Color(hex: 0xF4F4FF)
+    static let accentPurple = Color(hex: 0xA855F7)
+    static let accentBlue = Color(hex: 0x3B82F6)
+    static let accentCyan = Color(hex: 0x38BDF8)
+    static let notePink = Color(hex: 0xF048C6)
+    static let green = Color(hex: 0x34D399)
+    static let orange = Color(hex: 0xF97316)
+    static let red = Color(hex: 0xEF4444)
+
+    static let accent = accentPurple
+    static let accentSecondary = accentBlue
+    static let good = green
+    static let danger = red
+    static let panelSecondary = panelSoft
 
     static var accentGradient: LinearGradient {
         LinearGradient(
-            colors: [accent, accentSecondary],
+            colors: [accentPurple, Color(hex: 0x6D5CF6), accentBlue],
             startPoint: .leading,
             endPoint: .trailing
         )
@@ -38,12 +49,76 @@ private struct PanelCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(padding)
-            .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(AppTheme.line, lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+    }
+}
+
+struct GradientCTAButtonStyle: ButtonStyle {
+    var secondary = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .heavy, design: .rounded))
+            .foregroundStyle(secondary ? AppTheme.text : .white)
+            .padding(.horizontal, 20)
+            .frame(minHeight: 44)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(secondary ? AppTheme.backgroundElevated : AppTheme.accentPurple)
+                    .overlay {
+                        if secondary {
+                            Capsule(style: .continuous)
+                                .strokeBorder(AppTheme.accentGradient, lineWidth: 1.5)
+                        } else {
+                            Capsule(style: .continuous)
+                                .fill(AppTheme.accentGradient)
+                        }
+                    }
+            }
+            .shadow(
+                color: secondary ? .clear : AppTheme.accentPurple.opacity(0.45),
+                radius: secondary ? 0 : 22
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+struct CircleIconButton: View {
+    let systemName: String
+    let compact: Bool
+    let action: () -> Void
+
+    init(
+        systemName: String,
+        compact: Bool = false,
+        action: @escaping () -> Void
+    ) {
+        self.systemName = systemName
+        self.compact = compact
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: compact ? 18 : 25, weight: .semibold))
+                .foregroundStyle(AppTheme.text)
+                .frame(width: compact ? 42 : 56, height: compact ? 42 : 56)
+                .background(AppTheme.backgroundElevated, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(AppTheme.accentGradient, lineWidth: 2)
+                }
+                .shadow(color: AppTheme.accentPurple.opacity(0.45), radius: 12)
+                .shadow(color: AppTheme.accentBlue.opacity(0.42), radius: 12)
+        }
+        .buttonStyle(.plain)
     }
 }
 

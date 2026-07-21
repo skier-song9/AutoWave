@@ -64,8 +64,7 @@ struct HomeView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(GradientCTAButtonStyle())
 
             NavigationLink {
                 ImportView()
@@ -73,8 +72,7 @@ struct HomeView: View {
                 Label("음원 가져오기", systemImage: "plus.circle.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(GradientCTAButtonStyle(secondary: true))
         }
         .panelCard()
     }
@@ -84,7 +82,7 @@ struct HomeView: View {
             Text("곧 만나요")
                 .font(.footnote.weight(.semibold))
                 .textCase(.uppercase)
-                .foregroundStyle(AppTheme.accent)
+                .foregroundStyle(AppTheme.accentPurple)
 
             disabledRow(title: "멀티플레이 (준비 중)", systemImage: "person.2.fill")
             disabledRow(title: "계정 연동 (준비 중)", systemImage: "link.circle")
@@ -98,8 +96,16 @@ struct HomeView: View {
         Button {} label: {
             Label(title, systemImage: systemImage)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .foregroundStyle(AppTheme.muted)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(AppTheme.line, lineWidth: 1)
+                }
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.plain)
         .disabled(true)
     }
 
@@ -135,6 +141,11 @@ private struct ProfileChip: View {
                 .foregroundStyle(.white)
                 .frame(width: 30, height: 30)
                 .background(ProfileColor.color(for: profile.avatarTint), in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(AppTheme.accentGradient, lineWidth: 2)
+                }
+                .shadow(color: AppTheme.accentPurple.opacity(0.45), radius: 10)
 
             Text(profile.nickname)
                 .font(.subheadline.weight(.medium))
@@ -143,7 +154,11 @@ private struct ProfileChip: View {
         .padding(.vertical, 5)
         .padding(.leading, 5)
         .padding(.trailing, 10)
-        .background(.thinMaterial, in: Capsule())
+        .background(AppTheme.backgroundElevated, in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(AppTheme.accentPurple.opacity(0.72), lineWidth: 1)
+        }
     }
 }
 
@@ -154,7 +169,7 @@ private struct HomeWaveGlyph: View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .stroke(.cyan.opacity(0.22), lineWidth: 1.5)
+                    .stroke(AppTheme.accentPurple.opacity(0.22), lineWidth: 1.5)
                     .scaleEffect(isAnimating ? 1.35 : 0.55)
                     .opacity(isAnimating ? 0 : 0.7)
                     .animation(
@@ -167,7 +182,7 @@ private struct HomeWaveGlyph: View {
 
             Image(systemName: "water.waves")
                 .font(.title2.weight(.semibold))
-                .foregroundStyle(.cyan)
+                .foregroundStyle(AppTheme.accentCyan)
         }
         .frame(width: 44, height: 44)
         .onAppear { isAnimating = true }
