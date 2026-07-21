@@ -12,6 +12,7 @@ struct SongSelectView: View {
     @State private var isImportPresented = false
     @State private var isProfilePresented = false
     @State private var readyTrack: TrackEntity?
+    @State private var trackPendingDeletion: TrackEntity?
     @State private var gameplayTrack: TrackEntity?
     @State private var gameplayDifficulty: Difficulty?
     @State private var noteSpeedState = NoteSpeedMultiplierState()
@@ -28,6 +29,16 @@ struct SongSelectView: View {
                 }
 
                 controls
+
+                if let trackPendingDeletion {
+                    DeleteConfirmDialog(
+                        track: trackPendingDeletion,
+                        onCancel: { dismissDeleteDialog() },
+                        onDelete: { deleteTrack(trackPendingDeletion) }
+                    )
+                    .zIndex(30)
+                    .transition(.opacity)
+                }
             }
         }
         .appScreenBackground()
@@ -161,6 +172,10 @@ struct SongSelectView: View {
                 if abs(distance) <= 2 {
                     Button {
                         if distance == 0 {
+                            // A completed long-press still ends in a touch-up,
+                            // which fires the button — suppress the tap once the
+                            // delete dialog has been requested.
+                            guard trackPendingDeletion == nil else { return }
                             readyTrack = track
                         } else {
                             moveFocus(to: index)
@@ -175,6 +190,15 @@ struct SongSelectView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in
+                                guard distance == 0 else { return }
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    trackPendingDeletion = track
+                                }
+                            }
+                    )
                     .opacity(distance == 0 ? 1 : 0.56)
                     .offset(y: CGFloat(distance) * step + dragOffset)
                     .zIndex(Double(10 - abs(distance)))
@@ -250,6 +274,83 @@ struct SongSelectView: View {
             focusedIndex = target
             dragOffset = 0
         }
+    }
+
+    private func dismissDeleteDialog() {
+        withAnimation(.easeOut(duration: 0.16)) {
+            trackPendingDeletion = nil
+        }
+    }
+
+    private func deleteTrack(_ track: TrackEntity) {
+        dismissDeleteDialog()
+        do {
+            // Beatmaps/score records cascade with the row; the imported audio
+            // copy is removed best-effort inside the service.
+            // `onChange(of: tracks.count)` re-clamps `focusedIndex`, and the
+            // empty state takes over when the last track goes away.
+            try TrackDeletionService.delete(track, in: modelContext)
+        } catch {
+            assertionFailure("트랙 삭제 실패: \(error)")
+        }
+    }
+}
+
+private struct DeleteConfirmDialog: View {
+    let track: TrackEntity
+    let onCancel: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.68)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onCancel)
+                .accessibilityHidden(true)
+
+            VStack(spacing: 0) {
+                Image(systemName: "trash")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(AppTheme.red)
+                    .shadow(color: AppTheme.red.opacity(0.85), radius: 9)
+
+                Text("곡 삭제")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(AppTheme.text)
+                    .padding(.top, 9)
+
+                Text("'\(track.title)' 을(를) 라이브러리에서 제거합니다. 생성된 비트맵도 함께 삭제됩니다.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedBright)
+                    .lineSpacing(3)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 6)
+
+                HStack(spacing: 9) {
+                    Button("삭제", action: onDelete)
+                        .buttonStyle(DangerCTAButtonStyle())
+
+                    Button("취소", action: onCancel)
+                        .buttonStyle(GradientCTAButtonStyle(secondary: true))
+                }
+                .padding(.top, 15)
+            }
+            .padding(.vertical, 19)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: 330)
+            .background(
+                AppTheme.backgroundElevated,
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(AppTheme.dangerBorderGradient, lineWidth: 1.5)
+            }
+            .shadow(color: AppTheme.red.opacity(0.34), radius: 26)
+            .shadow(color: AppTheme.accentPurple.opacity(0.18), radius: 42)
+        }
+        .accessibilityAddTraits(.isModal)
     }
 }
 

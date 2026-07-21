@@ -252,6 +252,7 @@
       cursor: default;
     }
     .button.secondary { border: 1px solid transparent; color: var(--text); background: linear-gradient(var(--background-elevated), var(--background-elevated)) padding-box, var(--accent-gradient) border-box; box-shadow: none; }
+    .button.danger { background: linear-gradient(160deg, #F87171, var(--red) 46%, #C22B2B); box-shadow: 0 0 22px rgba(239, 68, 68, .5); }
     .button .symbol-ref { color: currentColor; font-size: 17px; }
     .symbol-ref { font: 10px var(--mono); letter-spacing: -.04em; }
     .circle-button {
@@ -404,6 +405,20 @@
     .good { color: #FDE047; }
     .bad { color: #F97316; }
     .miss { color: #EF4444; }
+    .confirm-dialog {
+      width: min(100%, 330px);
+      padding: 19px 18px;
+      border: 1.5px solid transparent;
+      border-radius: 20px;
+      background: linear-gradient(var(--background-elevated), var(--background-elevated)) padding-box, linear-gradient(130deg, var(--red), color-mix(in srgb, var(--red) 55%, var(--accent-purple)) 52%, var(--accent-purple)) border-box;
+      box-shadow: 0 0 26px rgba(239, 68, 68, .34), 0 0 42px rgba(168, 85, 247, .18);
+      text-align: center;
+    }
+    .confirm-dialog .dialog-icon { display: block; margin: 0 auto; color: var(--red); filter: drop-shadow(0 0 9px rgba(239, 68, 68, .85)); }
+    .confirm-dialog h4 { margin: 9px 0 0; font-size: 17px; }
+    .confirm-dialog .caption { margin-top: 6px; line-height: 1.5; }
+    .confirm-dialog .button-row { margin-top: 15px; }
+    .confirm-dialog .button { min-height: 36px; padding: 0 17px; font-size: 12px; }
 
     .screen-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
     .screen-block { min-width: 0; }
@@ -739,6 +754,7 @@
           <article class="component-card"><div class="card-head"><h3>DragRibbon</h3><small>hold gesture</small></div><div class="demo"><div class="drag-demo"><span class="drag-band"></span><span class="drag-cap start"></span><span class="drag-cap end"></span></div></div><p class="spec">Band laneWidth × .45 + 2px core · purple/blue gradient · glossy 28px caps · break state greys remaining ribbon.</p></article>
           <article class="component-card"><div class="card-head"><h3>Receptor</h3><small>bottom hit pad</small></div><div class="demo"><span class="receptor-demo">◇</span></div><p class="spec">Rounded pad 128×52 demo · radius 17 · 2px gradient border · dark translucent fill · faint lane glyph, not a small pill.</p></article>
           <article class="component-card"><div class="card-head"><h3>PanelCard</h3><small>modal surface</small></div><div class="demo"><div class="panel-demo"><strong>어두운 패널</strong><p class="caption" style="margin-top:5px">반경과 글로우가 콘텐츠를 분리합니다.</p></div></div><p class="spec">Panel radius 16 · modal radius 28 · near-black fill · 1px line or optional purple gradient border · blur 18.</p></article>
+          <article class="component-card"><div class="card-head"><h3>DeleteConfirmDialog</h3><small>destructive modal</small></div><div class="demo"><div class="confirm-dialog"><svg class="dialog-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="trash"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13.5h9l1-13.5M10 11v6M14 11v6"/></svg><h4>곡 삭제</h4><p class="caption">'Beyond the Horizon' 을(를) 라이브러리에서 제거합니다. 생성된 비트맵도 함께 삭제됩니다.</p><div class="button-row"><button class="button danger">삭제</button><button class="button secondary">취소</button></div></div></div><p class="spec">Trigger: long-press on the focused AlbumDisc in SongSelect. Centered PanelCard variant · radius 20 · 1.5px red↔purple danger border/glow (<code>#EF4444</code> × accentPurple) · <code>trash</code> glyph red glow · destructive red CTA <code>#EF4444</code> + secondary cancel · SwiftUI <code>confirmationDialog</code> NOT used — custom overlay matches system language.</p></article>
           <article class="component-card"><div class="card-head"><h3>RippleProgress + JudgmentLabel</h3><small>analysis / feedback</small></div><div class="demo"><div class="demo-stack"><div style="display:flex;justify-content:center"><div class="ripple-demo"><span class="ring"></span><span class="ring"></span><span class="ring"></span><span class="ripple-core"></span></div></div><div class="judgment-list"><span class="judgment-label perfect">PERFECT</span><span class="judgment-label miss">MISS</span></div></div></div><p class="spec">Ripple: 3 expanding rings, 2s ease-out, .55s stagger. Judgment: 22px mono caps, matching result glow.</p></article>
         </div>
       </section>
@@ -752,7 +768,7 @@
             <div class="album-disc focused"><i class="sparkle s1"></i><i class="sparkle s2"></i><i class="sparkle s3"></i><i class="sparkle s4"></i><div class="disc-copy"><strong>Beyond the Horizon</strong><span>Novoic</span><span class="disc-difficulty">HARD</span><span class="disc-dots"><i></i><i></i><i></i><i></i><i></i></span></div></div>
             <div class="album-disc neighbor" style="transform:translateY(18px);background:linear-gradient(160deg,#3B7C82,#0C1735 60%,#070813)"><div class="disc-copy"><strong>Echoes of You</strong><span>Luna Ray</span></div></div>
             <div class="album-disc neighbor" style="transform:translateY(30px);background:linear-gradient(160deg,#845059,#171536 62%,#070813)"><div class="disc-copy"><strong>Last Summer</strong><span>MellowBeat</span></div></div>
-          </div></div></div><p class="screen-caption">SongSelect · LibraryView.swift + RootView.swift · concentric space rings · PlayerBadge · AlbumDisc carousel · chevrons · CircleIconButton plus</p></article>
+          </div></div></div><p class="screen-caption">SongSelect · LibraryView.swift + RootView.swift · concentric space rings · PlayerBadge · AlbumDisc carousel · chevrons · CircleIconButton plus · focused disc long-press → DeleteConfirmDialog (곡 삭제)</p></article>
           <article class="screen-block wide"><div class="device ready-scene"><span class="space-ring r2"></span><span class="space-ring r3"></span><span class="wave-ticks left"></span><span class="wave-ticks right"></span><span class="mini-carousel"></span><span class="ready-scrim"></span><span class="circle-button ready-close close">×</span><div class="ready-modal">
             <div class="ready-album"><div class="ready-art"><span class="circle-button play-overlay">▶</span></div><h3>Beyond the Horizon</h3><span class="artist">Novoic</span><div class="meta-line"><span>◷ 02:48</span><span>|</span><span>Electronic</span></div><div class="waveform-bars"><i style="--h:7px"></i><i style="--h:12px"></i><i style="--h:18px"></i><i style="--h:10px"></i><i style="--h:21px"></i><i style="--h:13px"></i><i style="--h:25px"></i><i style="--h:15px"></i><i style="--h:20px"></i><i style="--h:9px"></i><i style="--h:23px"></i><i style="--h:14px"></i><i style="--h:7px"></i><i style="--h:17px"></i><i style="--h:11px"></i></div></div>
             <div class="ready-settings"><div class="settings-panel ready-difficulty"><h4>난이도</h4><div class="difficulty-row"><div class="difficulty-card heaven"><span class="diff-icon">☆</span><strong>천국</strong><small>Lv. 5</small></div><div class="difficulty-card easy"><span class="diff-icon">☆</span><strong>쉬움</strong><small>Lv. 10</small></div><div class="difficulty-card normal selected"><span class="diff-icon">✦</span><strong>보통</strong><small>Lv. 15</small></div><div class="difficulty-card hard"><span class="diff-icon">♨</span><strong>어려움</strong><small>Lv. 20</small></div><div class="difficulty-card hell"><span class="diff-icon">♆</span><strong>지옥</strong><small>Lv. 25</small></div></div></div>

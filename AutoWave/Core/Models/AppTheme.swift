@@ -31,6 +31,24 @@ enum AppTheme {
             endPoint: .trailing
         )
     }
+
+    /// Destructive fill — styleguide `.button.danger`.
+    static var dangerGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: 0xF87171), red, Color(hex: 0xC22B2B)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    /// Danger border — styleguide DeleteConfirmDialog red↔purple edge.
+    static var dangerBorderGradient: LinearGradient {
+        LinearGradient(
+            colors: [red, Color(hex: 0xCF4C95), accentPurple],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
 
 extension Color {
@@ -84,6 +102,25 @@ struct GradientCTAButtonStyle: ButtonStyle {
                 color: secondary ? .clear : AppTheme.accentPurple.opacity(0.45),
                 radius: secondary ? 0 : 22
             )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// Destructive red pill CTA — styleguide `.button.danger`
+/// (red gradient fill, white heavy label, red glow).
+struct DangerCTAButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .heavy, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 20)
+            .frame(minHeight: 44)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(AppTheme.dangerGradient)
+            }
+            .shadow(color: AppTheme.red.opacity(0.5), radius: 22)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }

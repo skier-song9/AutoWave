@@ -695,16 +695,13 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private final class LaneHitEffectNode: SKNode {
-        private static let beamStripCount = 10
+        private static let beamTextureSize = CGSize(width: 4, height: 256)
 
         private let lane: Int
         private let contentNode = SKNode()
         private let contentCropNode = SKCropNode()
         private let contentMaskNode = SKShapeNode()
-        private let beamCropNode = SKCropNode()
-        private let beamMaskNode = SKShapeNode()
-        private let beamContainer = SKNode()
-        private let beamStrips: [SKShapeNode]
+        private let beamSprite = SKSpriteNode()
         private let rippleCropNode = SKCropNode()
         private let rippleMaskNode = SKShapeNode()
         private let rippleFlash = SKShapeNode()
@@ -712,29 +709,23 @@ final class GameScene: SKScene, @unchecked Sendable {
         private let rippleCore = SKShapeNode()
         private var color: SKColor
         private var laneWidth: CGFloat = 0
+        private var beamTextureColor: SKColor?
 
         init(lane: Int, color: SKColor) {
             self.lane = lane
             self.color = color
-            beamStrips = (0..<Self.beamStripCount).map { _ in SKShapeNode() }
             super.init()
 
-            beamMaskNode.fillColor = .white
-            beamMaskNode.strokeColor = .clear
-            beamCropNode.maskNode = beamMaskNode
-            beamCropNode.addChild(beamContainer)
-            contentNode.addChild(beamCropNode)
+            // One continuous bottom-up gradient glow, clipped to the lane
+            // trapezoid by contentCropNode so it follows the perspective shape.
+            beamSprite.anchorPoint = CGPoint(x: 0.5, y: 0)
+            beamSprite.blendMode = .add
+            contentNode.addChild(beamSprite)
 
             contentMaskNode.fillColor = .white
             contentMaskNode.strokeColor = .clear
             contentCropNode.maskNode = contentMaskNode
             contentCropNode.addChild(contentNode)
-
-            for strip in beamStrips {
-                strip.strokeColor = .clear
-                strip.blendMode = .add
-                beamContainer.addChild(strip)
-            }
 
             addChild(contentCropNode)
 
@@ -787,24 +778,15 @@ final class GameScene: SKScene, @unchecked Sendable {
             maskPath.addLine(to: CGPoint(x: bottomRightX, y: 0))
             maskPath.addLine(to: CGPoint(x: bottomLeftX, y: 0))
             maskPath.closeSubpath()
-            beamMaskNode.path = maskPath
             contentMaskNode.path = maskPath
 
+            // The gradient sprite spans the lane's full horizontal extent; the
+            // trapezoid crop mask trims it to the perspective shape.
             let beamHeight = projection.travelHeight * 0.42
-            let stripWidth = laneWidth
-            for index in beamStrips.indices {
-                let lower = beamHeight * CGFloat(index) / CGFloat(Self.beamStripCount)
-                let upper = beamHeight * CGFloat(index + 1) / CGFloat(Self.beamStripCount)
-                beamStrips[index].path = CGPath(
-                    rect: CGRect(
-                        x: -stripWidth / 2,
-                        y: lower,
-                        width: stripWidth,
-                        height: upper - lower + 0.5
-                    ),
-                    transform: nil
-                )
-            }
+            let beamMinX = min(topLeftX, bottomLeftX)
+            let beamMaxX = max(topRightX, bottomRightX)
+            beamSprite.size = CGSize(width: beamMaxX - beamMinX, height: beamHeight)
+            beamSprite.position = CGPoint(x: (beamMinX + beamMaxX) / 2, y: 0)
 
             // Max ripple radius: own half-lane (0.5) + half of the adjacent
             // lane (0.5) = laneWidth × 1.0.
@@ -868,20 +850,63 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         private func updateColors(_ color: SKColor) {
-            for index in beamStrips.indices {
-                let progress = CGFloat(index) / CGFloat(Self.beamStripCount - 1)
-                if progress < 0.25 {
-                    let alpha = 0.92 - progress * 1.2
-                    beamStrips[index].fillColor = SKColor.white.withAlphaComponent(alpha)
-                } else {
-                    let alpha = 0.28 * (1 - progress) / 0.75
-                    beamStrips[index].fillColor = color.withAlphaComponent(alpha)
-                }
+            if beamTextureColor?.isEqual(color) != true {
+                beamSprite.texture = Self.makeBeamTexture(color: color)
+                beamTextureColor = color
             }
 
             rippleFlash.fillColor = color.withAlphaComponent(0.5)
             rippleRing.strokeColor = color
             rippleCore.fillColor = SKColor.white.withAlphaComponent(0.95)
+        }
+
+        // Single smooth vertical gradient for the lane glow: a hot, nearly
+        // white base at the hit line easing into the lane color and fading to
+        // fully transparent at the top. Rendered once per lane color and
+        // cached via beamTextureColor — never rebuilt per hit.
+        private static func makeBeamTexture(color: SKColor) -> SKTexture {
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var baseAlpha: CGFloat = 0
+            color.getRed(&red, green: &green, blue: &blue, alpha: &baseAlpha)
+
+            func stop(whiteAmount: CGFloat, alpha: CGFloat) -> UIColor {
+                UIColor(
+                    red: red + (1 - red) * whiteAmount,
+                    green: green + (1 - green) * whiteAmount,
+                    blue: blue + (1 - blue) * whiteAmount,
+                    alpha: alpha
+                )
+            }
+
+            let size = beamTextureSize
+            let format = UIGraphicsImageRendererFormat()
+            format.opaque = false
+            let image = UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+                let colors: [CGColor] = [
+                    stop(whiteAmount: 0.85, alpha: 0.85).cgColor,
+                    stop(whiteAmount: 0.50, alpha: 0.60).cgColor,
+                    stop(whiteAmount: 0.15, alpha: 0.36).cgColor,
+                    stop(whiteAmount: 0, alpha: 0.15).cgColor,
+                    stop(whiteAmount: 0, alpha: 0).cgColor
+                ]
+                let locations: [CGFloat] = [0, 0.10, 0.26, 0.55, 1]
+                guard let gradient = CGGradient(
+                    colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                    colors: colors as CFArray,
+                    locations: locations
+                ) else { return }
+                // Renderer coordinates are top-down, so the bright end of the
+                // gradient starts at y == height (the hit line).
+                rendererContext.cgContext.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: size.height),
+                    end: CGPoint(x: 0, y: 0),
+                    options: []
+                )
+            }
+            return SKTexture(image: image)
         }
     }
 

@@ -40,8 +40,10 @@
 		81564F3740B39BA6E637C24E /* ScoreRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 769C1316680D3B6CA33592A9 /* ScoreRecord.swift */; };
 		87B4A988BF48A66D3BB5FAAC /* Beatmap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D15A471F4F77E1DB616866 /* Beatmap.swift */; };
 		89A5AABFD6B5F8635EC54433 /* GameplayContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */; };
+		89F85793408CDF0DDACABCE8 /* TrackDeletionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFC73302B9783DCCE5C0A1A /* TrackDeletionServiceTests.swift */; };
 		8B675AF49E938DB1D2B0A5BD /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FC0C485E13506255F9E5D2 /* Note.swift */; };
 		8BD1367540EEDE6E31A83AA3 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479C4135C9E7AB3F9874DB47 /* RootView.swift */; };
+		8D2AD4FA791A47181C2E7091 /* TrackDeletionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 629244EE9BC09AA33458915F /* TrackDeletionService.swift */; };
 		98609DE5D28DF6093289DED5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D13CB8183B74413834203CDE /* Assets.xcassets */; };
 		9D9C31DA31219A36B2BFFFED /* MIRAnalyzers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D302061B3AB300D5303987B /* MIRAnalyzers.swift */; };
 		A57DAAADCBB5FE8A6B2CC281 /* MusicalEventAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C052EB22BFEAA180CE9FE1ED /* MusicalEventAdapter.swift */; };
@@ -81,7 +83,7 @@
 		08A10EA7786646DD984CE60D /* GameTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameTheme.swift; sourceTree = "<group>"; };
 		0D302061B3AB300D5303987B /* MIRAnalyzers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIRAnalyzers.swift; sourceTree = "<group>"; };
 		160827C3FB2FBDE75B7EF568 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		164548B634E0A08631B17C05 /* AutoWave.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AutoWave.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		19ED99EB4482C343DA2CB985 /* GameplayContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayContainerView.swift; sourceTree = "<group>"; };
 		21F5FCD750E8995AEF6729BE /* GameScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameScene.swift; sourceTree = "<group>"; };
 		22224A132309EC70DCAEFFCB /* OnsetDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnsetDetector.swift; sourceTree = "<group>"; };
@@ -96,8 +98,10 @@
 		52A1B76159F17CA25DC0A39B /* GameplayStartRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayStartRegressionTests.swift; sourceTree = "<group>"; };
 		5669E62DC438C49A5F39AE5F /* JudgmentEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgmentEngineTests.swift; sourceTree = "<group>"; };
 		5E5186CF25B7B76424064BF9 /* BeatmapGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatmapGeneratorTests.swift; sourceTree = "<group>"; };
+		629244EE9BC09AA33458915F /* TrackDeletionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackDeletionService.swift; sourceTree = "<group>"; };
 		662ED49B45959E690353C19E /* GameplayStabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameplayStabilityTests.swift; sourceTree = "<group>"; };
 		687EEEF72DF90A6C6862105E /* SongSelectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongSelectView.swift; sourceTree = "<group>"; };
+		6CFC73302B9783DCCE5C0A1A /* TrackDeletionServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackDeletionServiceTests.swift; sourceTree = "<group>"; };
 		769C1316680D3B6CA33592A9 /* ScoreRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreRecord.swift; sourceTree = "<group>"; };
 		7B4F01436BD8DE128B589DBF /* BeatmapKitAnalysisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatmapKitAnalysisTests.swift; sourceTree = "<group>"; };
 		82CA9B277736D2BFDC86AA79 /* ThemePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemePalette.swift; sourceTree = "<group>"; };
@@ -152,6 +156,7 @@
 				B2566011226FE45AC21A6643 /* HomeView.swift */,
 				05BDC228E3F5731F216AE1AB /* ProfileView.swift */,
 				687EEEF72DF90A6C6862105E /* SongSelectView.swift */,
+				629244EE9BC09AA33458915F /* TrackDeletionService.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -303,6 +308,7 @@
 				ABD51F9D7C091EF6B001814C /* ModelCodingTests.swift */,
 				CBDE3DE53FA697705BD3BF15 /* ProfileEntityTests.swift */,
 				48179B827633382FE68672F0 /* SmokeTests.swift */,
+				6CFC73302B9783DCCE5C0A1A /* TrackDeletionServiceTests.swift */,
 				A27C6934E3C4EBFA9C82F379 /* VisualizerTapTests.swift */,
 			);
 			path = AutoWaveTests;
@@ -364,6 +370,8 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
 			};
 			buildConfigurationList = F4CD9BD22895FB19A32034E3 /* Build configuration list for PBXProject "AutoWave" */;
 			developmentRegion = en;
@@ -415,6 +423,7 @@
 				468E64F472A83FAE0E394238 /* ModelCodingTests.swift in Sources */,
 				57FEEC0ABFCB98D0E67F0AD6 /* ProfileEntityTests.swift in Sources */,
 				E66F167FD2E3EA34EBA98A55 /* SmokeTests.swift in Sources */,
+				89F85793408CDF0DDACABCE8 /* TrackDeletionServiceTests.swift in Sources */,
 				477D1DA3C343CC7274B9360F /* VisualizerTapTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -459,6 +468,7 @@
 				DA28903BFFA7CD540C17EFBB /* TempoEstimator.swift in Sources */,
 				A92ADBDB3A1E2C3A73A3EEDE /* ThemePalette+Color.swift in Sources */,
 				3AE43FF324EF0826E0FAB2B8 /* ThemePalette.swift in Sources */,
+				8D2AD4FA791A47181C2E7091 /* TrackDeletionService.swift in Sources */,
 				05D08CA540F4625164D5CED5 /* TrackEntity.swift in Sources */,
 				E78B824D5F1A728432C905DD /* VisualizerTap.swift in Sources */,
 			);
@@ -632,7 +642,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = QSN8D73M83;
 				INFOPLIST_FILE = AutoWave/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -650,7 +659,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = QSN8D73M83;
 				INFOPLIST_FILE = AutoWave/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
