@@ -149,7 +149,7 @@ struct LibraryView: View {
             )
         ) {
             if let readyTrack {
-                ReadySheetView(
+                ReadyModal(
                     track: readyTrack,
                     difficulty: .normal,
                     speedState: noteSpeedState
@@ -272,7 +272,7 @@ private struct TrackRow: View {
 }
 
 @MainActor
-private struct ReadySheetView: View {
+struct ReadyModal: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -302,34 +302,40 @@ private struct ReadySheetView: View {
     }
 
     var body: some View {
-        ZStack {
-            AppTheme.background
-                .ignoresSafeArea()
+        GeometryReader { proxy in
+            let cardWidth = min(proxy.size.width * 0.85, 760)
+            let cardHeight = min(proxy.size.height * 0.85, 340)
 
-            ScrollView([.horizontal, .vertical], showsIndicators: false) {
-                HStack(alignment: .top, spacing: 22) {
+            ZStack {
+                Color.black.opacity(0.68)
+                    .ignoresSafeArea()
+
+                HStack(alignment: .top, spacing: 14) {
                     albumPanel
-                        .frame(width: 260)
-                    settingsColumn
-                        .frame(minWidth: 560, maxWidth: 760)
+                        .frame(width: min(max(cardWidth * 0.27, 170), 195))
+
+                    ScrollView(.vertical, showsIndicators: false) {
+                        settingsColumn
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.trailing, 6)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .padding(24)
-                .frame(maxWidth: 1_100, minHeight: 380)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(14)
+                .frame(width: cardWidth, height: cardHeight)
                 .background(AppTheme.backgroundElevated, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .strokeBorder(AppTheme.accentGradient, lineWidth: 1.5)
                 }
-                .shadow(color: AppTheme.accentPurple.opacity(0.34), radius: 32)
-                .shadow(color: AppTheme.accentBlue.opacity(0.18), radius: 42)
+                .shadow(color: AppTheme.accentPurple.opacity(0.34), radius: 28)
+                .shadow(color: AppTheme.accentBlue.opacity(0.18), radius: 36)
                 .overlay(alignment: .topTrailing) {
                     CircleIconButton(systemName: "xmark", compact: true) {
                         dismiss()
                     }
-                    .padding(14)
+                    .padding(7)
                 }
-                .padding(24)
             }
         }
         .task {
@@ -381,19 +387,19 @@ private struct ReadySheetView: View {
                         }
                         .padding(12)
                 }
-                .frame(height: 190)
-                .shadow(color: AppTheme.accentPurple.opacity(0.35), radius: 14)
+                .frame(height: 112)
+                .shadow(color: AppTheme.accentPurple.opacity(0.35), radius: 12)
 
             Text(track.title)
-                .font(.title3.weight(.bold))
-                .lineLimit(2)
-                .padding(.top, 16)
-            Text(formattedDuration(track.duration))
-                .font(.caption.monospacedDigit())
+                .font(.headline.weight(.bold))
+                .lineLimit(1)
+                .padding(.top, 9)
+            Text("로컬 음원 · \(formattedDuration(track.duration))")
+                .font(.caption2.monospacedDigit())
                 .foregroundStyle(AppTheme.mutedBright)
                 .padding(.top, 4)
         }
-        .padding(12)
+        .padding(9)
         .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -402,9 +408,9 @@ private struct ReadySheetView: View {
     }
 
     private var settingsColumn: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 6) {
             settingsPanel(title: "난이도") {
-                HStack(spacing: 8) {
+                HStack(spacing: 5) {
                     ForEach(Difficulty.allCases, id: \.rawValue) { difficulty in
                         difficultyCard(difficulty)
                     }
@@ -416,10 +422,10 @@ private struct ReadySheetView: View {
                     title: "LANE 개수",
                     caption: "노트가 떨어지는 라인의 개수를 설정합니다."
                 )
-                Spacer(minLength: 8)
-                HStack(spacing: 7) {
+                Spacer(minLength: 4)
+                HStack(spacing: 5) {
                     ForEach(4...7, id: \.self) { value in
-                        optionChip("\(value)", selected: laneCount == value, size: 72) {
+                        optionChip("\(value)", selected: laneCount == value, size: 32) {
                             laneCount = value
                         }
                     }
@@ -431,13 +437,13 @@ private struct ReadySheetView: View {
                     title: "배속",
                     caption: "게임 속도를 설정합니다."
                 )
-                Spacer(minLength: 8)
-                HStack(spacing: 7) {
+                Spacer(minLength: 4)
+                HStack(spacing: 5) {
                     ForEach(NoteSpeedMultiplierState.allowedValues, id: \.self) { value in
                         optionChip(
                             speedLabel(Double(value)),
                             selected: abs(Double(speedState.value) - Double(value)) < 0.000_001,
-                            size: 64
+                            size: 32
                         ) {
                             selectSpeed(Double(value))
                         }
@@ -449,13 +455,13 @@ private struct ReadySheetView: View {
             if isStarting {
                 ProgressView("비트맵 준비 중…")
                     .tint(AppTheme.accentPurple)
-                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .frame(maxWidth: .infinity, minHeight: 34)
             } else {
                 Button {
                     startGame()
                 } label: {
                     Label("START", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, minHeight: 34)
                 }
                 .buttonStyle(GradientCTAButtonStyle())
             }
@@ -466,14 +472,14 @@ private struct ReadySheetView: View {
         title: String? = nil,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             if let title {
                 Text(title)
-                    .font(.headline)
+                    .font(.caption.weight(.bold))
             }
             content()
         }
-        .padding(14)
+        .padding(8)
         .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -484,9 +490,9 @@ private struct ReadySheetView: View {
     private func settingCopy(title: String, caption: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.headline)
+                .font(.caption.weight(.bold))
             Text(caption)
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(AppTheme.muted)
         }
     }
@@ -497,18 +503,18 @@ private struct ReadySheetView: View {
         return Button {
             selectedDifficulty = difficulty
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 3) {
                 Image(systemName: difficulty.iconSystemName)
-                    .font(.title2)
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(difficulty.tint)
                     .shadow(color: difficulty.tint, radius: 10)
                 Text(difficulty.displayName)
-                    .font(.caption.weight(.bold))
+                    .font(.system(size: 9, weight: .bold))
                 Text(difficulty.levelLabel)
-                    .font(.caption2.monospacedDigit())
+                    .font(.system(size: 8, design: .monospaced))
                     .foregroundStyle(AppTheme.mutedBright)
             }
-            .frame(maxWidth: .infinity, minHeight: 96)
+            .frame(maxWidth: .infinity, minHeight: 54)
         }
         .buttonStyle(.plain)
         .background(
@@ -524,9 +530,8 @@ private struct ReadySheetView: View {
         }
         .shadow(
             color: isSelected ? AppTheme.accentPurple.opacity(0.55) : .clear,
-            radius: isSelected ? 26 : 0
+            radius: isSelected ? 16 : 0
         )
-        .scaleEffect(isSelected ? 1.02 : 1)
         .animation(.easeOut(duration: 0.16), value: isSelected)
     }
 
@@ -538,7 +543,7 @@ private struct ReadySheetView: View {
     ) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.caption.weight(.bold).monospacedDigit())
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(selected ? .white : AppTheme.mutedBright)
                 .frame(width: size, height: size)
                 .background(AppTheme.backgroundElevated, in: Circle())

@@ -45,6 +45,15 @@ space background. This becomes the root screen.
 - Difficulty label on the focused disc: highest available difficulty of that
   track's beatmaps (e.g. "HARD"), colored by its tint; hide if none.
 
+## Owner feedback to fix (from testing task 28 on device)
+
+- The ReadyModal currently renders LARGER than the iOS landscape screen. Fix its
+  presentation: present as an overlay/fullScreenCover over SongSelect with a
+  dim scrim (not a .sheet), and constrain the modal to fit the landscape safe
+  area — target max ~85% width × ~85% height of an 852×393pt screen. Compact
+  paddings/fonts to match the styleguide mock proportions; if content still
+  cannot fit, the right column scrolls, never the whole screen.
+
 ## Constraints
 
 - Do not touch GameScene.swift/GameTheme.swift/BeatmapKit/tests.

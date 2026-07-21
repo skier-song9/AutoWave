@@ -43,8 +43,12 @@ life bar. Gameplay logic (judgment, scoring, spawning, input) must not change.
 - Background: vertical gradient backgroundTop→mid #171044→backgroundBottom
   (texture or layered nodes), a few faint star dots, optional simple dark
   city-silhouette strip near the horizon (skip if it risks perf).
-- Judgment labels/beam/burst effects: keep, retint accents to theme
-  judgmentAccent (purple).
+- Judgment labels/beam/burst effects: retint accents to theme judgmentAccent
+  (purple). OWNER FEEDBACK: the current hit effect is far too large — confine
+  every hit/press effect (beam, burst, flash) strictly to the width of the
+  judged lane at the hit line (beam width = that lane's width at its y-range,
+  burst diameter ≤ lane width at hit line), clipped so nothing bleeds into
+  neighboring lanes.
 
 ## 3. HUD — circular ring gauges (configureHUD ~1024)
 
