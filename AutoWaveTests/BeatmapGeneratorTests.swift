@@ -487,15 +487,17 @@ final class BeatmapGeneratorTests: XCTestCase {
 
         let deepSea = try XCTUnwrap(GameTheme.presets.first { $0.id == "deepSea" })
         XCTAssertEqual(deepSea.displayName, "심해")
-        XCTAssertEqual(deepSea.backgroundTop, RGB(hex: 0x070B26))
-        XCTAssertEqual(deepSea.backgroundBottom, RGB(hex: 0x17103F))
-        XCTAssertEqual(deepSea.tapNote, RGB(hex: 0x4FC3F7))
+        XCTAssertEqual(deepSea.backgroundTop, RGB(hex: 0x050617))
+        XCTAssertEqual(deepSea.backgroundBottom, RGB(hex: 0x08091D))
+        XCTAssertEqual(deepSea.tapNote, RGB(hex: 0x38BDF8))
         XCTAssertEqual(deepSea.tapNoteStroke, RGB(hex: 0xFFFFFF))
         XCTAssertEqual(deepSea.dragBody, RGB(hex: 0x7E57C2))
         XCTAssertEqual(deepSea.dragCap, RGB(hex: 0xB39DDB))
         XCTAssertEqual(deepSea.ripple, RGB(hex: 0x283593))
-        XCTAssertEqual(deepSea.judgmentAccent, RGB(hex: 0xFFD54F))
-        XCTAssertEqual(deepSea.laneLine, RGB(hex: 0x7986CB))
+        XCTAssertEqual(deepSea.judgmentAccent, RGB(hex: 0xA855F7))
+        XCTAssertEqual(deepSea.laneLine, RGB(hex: 0xA855F7))
+        XCTAssertEqual(deepSea.laneEdgeA, RGB(hex: 0xF048C6))
+        XCTAssertEqual(deepSea.laneEdgeB, RGB(hex: 0x38BDF8))
 
         let expectedIDs = ["deepSea", "neonRush", "tide", "dawn", "prism"]
         XCTAssertEqual(GameTheme.presets.map(\.id), expectedIDs)

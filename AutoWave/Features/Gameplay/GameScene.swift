@@ -17,7 +17,18 @@ private func makeColor(for rgb: RGB, alpha: CGFloat = 1) -> SKColor {
     )
 }
 
+private func blend(_ first: RGB, _ second: RGB, amount: Double) -> RGB {
+    let progress = min(max(amount, 0), 1)
+    return RGB(
+        r: first.r + (second.r - first.r) * progress,
+        g: first.g + (second.g - first.g) * progress,
+        b: first.b + (second.b - first.b) * progress
+    )
+}
+
 final class GameScene: SKScene, @unchecked Sendable {
+    private static let neonSkyMid = RGB(hex: 0x171044)
+
     private func makeScanlineTexture() -> SKTexture {
         let size = CGSize(width: 4, height: 256)
         let format = UIGraphicsImageRendererFormat()
@@ -148,6 +159,28 @@ final class GameScene: SKScene, @unchecked Sendable {
                 )
                 context.restoreGState()
 
+                let dashHeight = max(noteSize.height * 0.14, 3)
+                let dashRect = CGRect(
+                    x: pillRect.midX - noteSize.width * 0.25,
+                    y: pillRect.midY - dashHeight / 2,
+                    width: noteSize.width * 0.50,
+                    height: dashHeight
+                )
+                let dashPath = UIBezierPath(
+                    roundedRect: dashRect,
+                    cornerRadius: dashHeight / 2
+                )
+                context.saveGState()
+                context.setShadow(
+                    offset: .zero,
+                    blur: 8,
+                    color: UIColor.white.withAlphaComponent(0.85).cgColor
+                )
+                context.setFillColor(UIColor.white.cgColor)
+                context.addPath(dashPath.cgPath)
+                context.fillPath()
+                context.restoreGState()
+
                 context.setStrokeColor(UIColor.white.withAlphaComponent(0.75).cgColor)
                 context.setLineWidth(1.5)
                 context.addPath(pillPath.cgPath)
@@ -251,6 +284,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         private let remainingBand = SKShapeNode()
         private let remainingCore = SKShapeNode()
         private let headCap = SKShapeNode()
+        private let headDash = SKShapeNode()
         private let crest = SKShapeNode()
         private let cropNode = SKCropNode()
         private let cropMask = SKShapeNode()
@@ -291,7 +325,13 @@ final class GameScene: SKScene, @unchecked Sendable {
             headCap.fillColor = capColor
             headCap.strokeColor = capStrokeColor
             headCap.lineWidth = 2
+            headCap.glowWidth = 6
             headCap.zPosition = 2
+            headDash.fillColor = .white
+            headDash.strokeColor = .clear
+            headDash.blendMode = .add
+            headDash.zPosition = 1
+            headCap.addChild(headDash)
 
             crest.fillColor = bodyColor
             crest.strokeColor = .clear
@@ -355,6 +395,17 @@ final class GameScene: SKScene, @unchecked Sendable {
                 transform: nil
             )
             headCap.path = capPath
+            headDash.path = CGPath(
+                roundedRect: CGRect(
+                    x: -capWidth * 0.25,
+                    y: -1.5,
+                    width: capWidth * 0.50,
+                    height: 3
+                ),
+                cornerWidth: 1.5,
+                cornerHeight: 1.5,
+                transform: nil
+            )
             crest.path = CGPath(
                 roundedRect: CGRect(
                     x: -laneWidth * 0.225,
@@ -648,6 +699,8 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         private let lane: Int
         private let contentNode = SKNode()
+        private let contentCropNode = SKCropNode()
+        private let contentMaskNode = SKShapeNode()
         private let beamCropNode = SKCropNode()
         private let beamMaskNode = SKShapeNode()
         private let beamContainer = SKNode()
@@ -672,6 +725,11 @@ final class GameScene: SKScene, @unchecked Sendable {
             beamCropNode.addChild(beamContainer)
             contentNode.addChild(beamCropNode)
 
+            contentMaskNode.fillColor = .white
+            contentMaskNode.strokeColor = .clear
+            contentCropNode.maskNode = contentMaskNode
+            contentCropNode.addChild(contentNode)
+
             for strip in beamStrips {
                 strip.strokeColor = .clear
                 strip.blendMode = .add
@@ -691,7 +749,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             ring.lineWidth = 2.5
             ring.blendMode = .add
             contentNode.addChild(ring)
-            addChild(contentNode)
+            addChild(contentCropNode)
 
             zPosition = 4
             isHidden = true
@@ -718,9 +776,10 @@ final class GameScene: SKScene, @unchecked Sendable {
             maskPath.addLine(to: CGPoint(x: bottomLeftX, y: 0))
             maskPath.closeSubpath()
             beamMaskNode.path = maskPath
+            contentMaskNode.path = maskPath
 
             let beamHeight = projection.travelHeight * 0.42
-            let stripWidth = laneWidth * 2.4
+            let stripWidth = laneWidth
             for index in beamStrips.indices {
                 let lower = beamHeight * CGFloat(index) / CGFloat(Self.beamStripCount)
                 let upper = beamHeight * CGFloat(index + 1) / CGFloat(Self.beamStripCount)
@@ -746,15 +805,15 @@ final class GameScene: SKScene, @unchecked Sendable {
             burstNode.removeAllActions()
             ring.removeAllActions()
             contentNode.alpha = 1
-            burstNode.setScale(laneWidth * 0.75)
-            ring.setScale(laneWidth * 0.38)
+            burstNode.setScale(laneWidth * 0.15)
+            ring.setScale(laneWidth * 0.15)
 
             let duration: TimeInterval = 0.25
             let fade = SKAction.fadeAlpha(to: 0, duration: duration)
             fade.timingMode = .linear
-            let burstExpansion = SKAction.scale(to: laneWidth * 1.45, duration: duration)
+            let burstExpansion = SKAction.scale(to: laneWidth * 0.44, duration: duration)
             burstExpansion.timingMode = .linear
-            let ringExpansion = SKAction.scale(to: laneWidth * 1.10, duration: duration)
+            let ringExpansion = SKAction.scale(to: laneWidth * 0.42, duration: duration)
             ringExpansion.timingMode = .linear
             contentNode.run(fade)
             burstNode.run(burstExpansion)
@@ -780,6 +839,136 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
     }
 
+    private final class RingGaugeNode: SKNode {
+        private static let segmentCount = 28
+        private static let startAngle = CGFloat.pi * 0.75
+        private static let cyan = SKColor(red: 56 / 255, green: 189 / 255, blue: 248 / 255, alpha: 1)
+        private static let blue = SKColor(red: 59 / 255, green: 130 / 255, blue: 246 / 255, alpha: 1)
+        private static let purple = SKColor(red: 168 / 255, green: 85 / 255, blue: 247 / 255, alpha: 1)
+        private static let pink = SKColor(red: 240 / 255, green: 171 / 255, blue: 252 / 255, alpha: 1)
+
+        private let maxSweepFraction: CGFloat
+        private let track = SKShapeNode()
+        private let core = SKShapeNode(circleOfRadius: 1)
+        private let segments: [SKShapeNode]
+        private var radius: CGFloat = 0
+
+        init(maxSweepFraction: CGFloat) {
+            self.maxSweepFraction = maxSweepFraction
+            segments = (0..<Self.segmentCount).map { _ in SKShapeNode() }
+            super.init()
+
+            track.fillColor = .clear
+            track.strokeColor = SKColor.white.withAlphaComponent(0.12)
+            track.zPosition = 0
+            addChild(track)
+
+            core.fillColor = SKColor.black.withAlphaComponent(0.72)
+            core.strokeColor = .clear
+            core.zPosition = 1
+            addChild(core)
+
+            for segment in segments {
+                segment.fillColor = .clear
+                segment.lineWidth = 7
+                segment.lineCap = .round
+                segment.zPosition = 2
+                addChild(segment)
+            }
+
+            zPosition = 10
+        }
+
+        required init?(coder aDecoder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        func updateLayout(diameter: CGFloat, coreColor: SKColor) {
+            radius = max(diameter / 2 - 5, 1)
+            track.path = arcPath(radius: radius, start: Self.startAngle, sweep: 2 * .pi)
+            track.lineWidth = 7
+            core.fillColor = coreColor
+            core.setScale(max(diameter / 2 - 14, 1))
+            update(progress: 1, warning: false)
+        }
+
+        func update(progress: CGFloat, warning: Bool) {
+            guard radius > 0 else { return }
+
+            let sweep = 2 * CGFloat.pi * maxSweepFraction
+            let progress = min(max(progress, 0), 1)
+            let segmentSweep = sweep / CGFloat(Self.segmentCount)
+            let visibleSweep = sweep * progress
+            for index in segments.indices {
+                let start = CGFloat(index) * segmentSweep
+                let segmentProgress = min(max((visibleSweep - start) / segmentSweep, 0), 1)
+                segments[index].isHidden = segmentProgress <= 0.001
+                segments[index].path = arcPath(
+                    radius: radius,
+                    start: Self.startAngle + start,
+                    sweep: segmentSweep * segmentProgress
+                )
+                segments[index].strokeColor = warning
+                    ? warningColor(at: CGFloat(index) / CGFloat(max(Self.segmentCount - 1, 1)))
+                    : gradientColor(at: CGFloat(index) / CGFloat(max(Self.segmentCount - 1, 1)))
+            }
+        }
+
+        private func arcPath(radius: CGFloat, start: CGFloat, sweep: CGFloat) -> CGPath {
+            let path = CGMutablePath()
+            path.addArc(
+                center: .zero,
+                radius: radius,
+                startAngle: start,
+                endAngle: start + max(sweep, 0.0001),
+                clockwise: false
+            )
+            return path
+        }
+
+        private func gradientColor(at progress: CGFloat) -> SKColor {
+            let amount = min(max(progress, 0), 1)
+            if amount < 0.38 {
+                return interpolate(Self.cyan, Self.blue, amount / 0.38)
+            }
+            if amount < 0.84 {
+                return interpolate(Self.blue, Self.purple, (amount - 0.38) / 0.46)
+            }
+            return interpolate(Self.purple, Self.pink, (amount - 0.84) / 0.16)
+        }
+
+        private func warningColor(at progress: CGFloat) -> SKColor {
+            interpolate(
+                SKColor(red: 249 / 255, green: 115 / 255, blue: 22 / 255, alpha: 1),
+                SKColor(red: 239 / 255, green: 68 / 255, blue: 68 / 255, alpha: 1),
+                progress
+            )
+        }
+
+        private func interpolate(_ first: SKColor, _ second: SKColor, _ progress: CGFloat) -> SKColor {
+            var firstRed: CGFloat = 0
+            var firstGreen: CGFloat = 0
+            var firstBlue: CGFloat = 0
+            var firstAlpha: CGFloat = 0
+            var secondRed: CGFloat = 0
+            var secondGreen: CGFloat = 0
+            var secondBlue: CGFloat = 0
+            var secondAlpha: CGFloat = 0
+            guard first.getRed(&firstRed, green: &firstGreen, blue: &firstBlue, alpha: &firstAlpha),
+                  second.getRed(&secondRed, green: &secondGreen, blue: &secondBlue, alpha: &secondAlpha) else {
+                return first
+            }
+
+            let amount = min(max(progress, 0), 1)
+            return SKColor(
+                red: firstRed + (secondRed - firstRed) * amount,
+                green: firstGreen + (secondGreen - firstGreen) * amount,
+                blue: firstBlue + (secondBlue - firstBlue) * amount,
+                alpha: firstAlpha + (secondAlpha - firstAlpha) * amount
+            )
+        }
+    }
+
     private struct RippleState {
         var isActive = false
         var age: TimeInterval = 0
@@ -800,6 +989,8 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let dragBodyColor: SKColor
     private let dragCapColor: SKColor
     private let laneLineColor: SKColor
+    private let laneEdgeAColor: SKColor
+    private let laneEdgeBColor: SKColor
     private let rippleColor: SKColor
     private let judgmentAccentColor: SKColor
     private let scrollSpeed: CGFloat
@@ -816,38 +1007,38 @@ final class GameScene: SKScene, @unchecked Sendable {
     private var laneHitEffectNodes: [LaneHitEffectNode] = []
     private var boundaryNodes: [SKShapeNode] = []
     private var receptorNodes: [SKShapeNode] = []
-    private var lifeSegmentNodes: [SKShapeNode] = []
+    private var receptorGlyphNodes: [SKShapeNode] = []
+    private var starNodes: [SKShapeNode] = []
     private var receptorFlashRemaining: [TimeInterval] = []
     private var rippleNodes: [SKShapeNode] = []
     private var rippleStates = Array(repeating: RippleState(), count: 6)
     private let backgroundOverlayNode = SKShapeNode()
+    private let citySilhouetteNode = SKShapeNode()
     private let scanlineOverlayNode = SKSpriteNode()
     private let hitLineNode = SKShapeNode()
-    private let comboPanelOuterNode = SKShapeNode()
-    private let comboPanelInnerNode = SKShapeNode()
-    private let scorePanelOuterNode = SKShapeNode()
-    private let scorePanelInnerNode = SKShapeNode()
-    private let lifePanelOuterNode = SKShapeNode()
-    private let lifePanelInnerNode = SKShapeNode()
-    private let comboCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let comboValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
-    private var comboOutlineLabels: [SKLabelNode] = []
-    private let comboOutlineOffsets = [
-        CGPoint(x: -1.5, y: 0),
-        CGPoint(x: 1.5, y: 0),
-        CGPoint(x: 0, y: -1.5),
-        CGPoint(x: 0, y: 1.5)
-    ]
+    private let healthRingNode = RingGaugeNode(maxSweepFraction: 0.85)
+    private let scoreRingNode = RingGaugeNode(maxSweepFraction: 1)
+    private let healthIconLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
+    private let healthCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let healthValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let scoreIconLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
     private let latestJudgmentLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let scoreCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let scoreValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let lifeCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
-    private let lifeGaugeTrack = SKShapeNode()
-    private let lifeGaugeFill = SKShapeNode()
+    private let scoreComboLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let gameOverLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
     private var laneAreaRect = CGRect.zero
     private var laneWidth: CGFloat = 0
     private var hitLineY: CGFloat = 0
+    private let starAnchors: [(x: CGFloat, y: CGFloat, radius: CGFloat)] = [
+        (0.14, 0.84, 1.0),
+        (0.24, 0.72, 0.8),
+        (0.69, 0.88, 1.0),
+        (0.79, 0.74, 0.8),
+        (0.88, 0.55, 1.0),
+        (0.08, 0.52, 0.8),
+        (0.64, 0.58, 0.7)
+    ]
     private var perspectiveProjection: PerspectiveProjection?
     private var scrollSpeedMultiplier: CGFloat = 1
     private var nextRippleIndex = 0
@@ -899,6 +1090,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         dragBodyColor = makeColor(for: selectedTheme.dragBody)
         dragCapColor = makeColor(for: selectedTheme.dragCap)
         laneLineColor = makeColor(for: selectedTheme.laneLine)
+        laneEdgeAColor = makeColor(for: selectedTheme.laneEdgeA)
+        laneEdgeBColor = makeColor(for: selectedTheme.laneEdgeB)
         rippleColor = makeColor(for: selectedTheme.ripple)
         judgmentAccentColor = makeColor(for: selectedTheme.judgmentAccent)
         scrollSpeed = CGFloat(DifficultyProfile.profile(for: difficulty).scrollSpeed)
@@ -931,9 +1124,23 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         backgroundOverlayNode.fillColor = makeColor(for: theme.backgroundTop)
         backgroundOverlayNode.strokeColor = .clear
-        backgroundOverlayNode.zPosition = -2
+        backgroundOverlayNode.zPosition = -4.75
         backgroundOverlayNode.alpha = 0
         addChild(backgroundOverlayNode)
+
+        citySilhouetteNode.fillColor = makeColor(for: RGB(hex: 0x090822), alpha: 0.94)
+        citySilhouetteNode.strokeColor = .clear
+        citySilhouetteNode.zPosition = -4
+        addChild(citySilhouetteNode)
+
+        for anchor in starAnchors {
+            let star = SKShapeNode(circleOfRadius: anchor.radius)
+            star.fillColor = SKColor.white.withAlphaComponent(0.58)
+            star.strokeColor = .clear
+            star.zPosition = -4.5
+            starNodes.append(star)
+            addChild(star)
+        }
 
         scanlineOverlayNode.texture = makeScanlineTexture()
         scanlineOverlayNode.anchorPoint = .zero
@@ -955,11 +1162,11 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         addChild(hitLineNode)
         hitLineNode.zPosition = 2
-        hitLineNode.strokeColor = laneLineColor
+        hitLineNode.strokeColor = laneLineColor.withAlphaComponent(0.38)
         hitLineNode.lineWidth = 1
 
         receptorFlashRemaining = Array(repeating: .zero, count: laneCount)
-        for _ in 0..<laneCount {
+        for index in 0..<laneCount {
             let lane = SKShapeNode()
             lane.fillColor = makeColor(for: theme.laneFill)
             lane.strokeColor = .clear
@@ -981,18 +1188,28 @@ final class GameScene: SKScene, @unchecked Sendable {
             addChild(hitEffect)
 
             let receptor = SKShapeNode()
-            receptor.fillColor = .clear
-            receptor.strokeColor = laneLineColor
-            receptor.lineWidth = 1
+            receptor.fillColor = makeColor(for: theme.backgroundBottom, alpha: 0.86)
+            receptor.strokeColor = laneEdgeColor(forLane: index)
+            receptor.lineWidth = 2
+            receptor.glowWidth = 4
             receptor.zPosition = 2.5
             receptorNodes.append(receptor)
             addChild(receptor)
+
+            let glyph = SKShapeNode()
+            glyph.fillColor = .clear
+            glyph.strokeColor = laneEdgeColor(forLane: index).withAlphaComponent(0.62)
+            glyph.lineWidth = 1
+            glyph.zPosition = 3
+            receptorGlyphNodes.append(glyph)
+            addChild(glyph)
         }
 
-        for _ in 0...laneCount {
+        for index in 0...laneCount {
             let boundary = SKShapeNode()
-            boundary.strokeColor = laneLineColor
-            boundary.lineWidth = 1
+            boundary.strokeColor = boundaryColor(for: index)
+            boundary.lineWidth = 2
+            boundary.glowWidth = 5
             boundary.zPosition = 1
             boundaryNodes.append(boundary)
             addChild(boundary)
@@ -1022,52 +1239,33 @@ final class GameScene: SKScene, @unchecked Sendable {
     }
 
     private func configureHUD() {
-        for panel in [
-            comboPanelOuterNode,
-            scorePanelOuterNode,
-            lifePanelOuterNode
-        ] {
-            panel.fillColor = makeColor(for: theme.backgroundTop, alpha: 0.35)
-            panel.strokeColor = laneLineColor.withAlphaComponent(0.75)
-            panel.lineWidth = 1
-            panel.zPosition = 10
-        }
-        for panel in [
-            comboPanelInnerNode,
-            scorePanelInnerNode,
-            lifePanelInnerNode
-        ] {
-            panel.fillColor = .clear
-            panel.strokeColor = laneLineColor.withAlphaComponent(0.45)
-            panel.lineWidth = 1
-            panel.zPosition = 10.1
-        }
+        healthIconLabel.text = "♥"
+        healthIconLabel.fontSize = 18
+        healthIconLabel.fontColor = .white
+        healthIconLabel.horizontalAlignmentMode = .center
+        healthIconLabel.verticalAlignmentMode = .center
+        healthIconLabel.zPosition = 12
 
-        comboCaptionLabel.text = nil
-        comboCaptionLabel.isHidden = true
-        comboCaptionLabel.horizontalAlignmentMode = .center
-        comboCaptionLabel.verticalAlignmentMode = .center
-        comboCaptionLabel.zPosition = 12
+        healthCaptionLabel.text = "HEALTH"
+        healthCaptionLabel.fontSize = 9
+        healthCaptionLabel.fontColor = SKColor.white.withAlphaComponent(0.72)
+        healthCaptionLabel.horizontalAlignmentMode = .center
+        healthCaptionLabel.verticalAlignmentMode = .center
+        healthCaptionLabel.zPosition = 12
 
-        comboValueLabel.text = "0"
-        comboValueLabel.fontSize = 36
-        comboValueLabel.fontColor = .white
-        comboValueLabel.horizontalAlignmentMode = .center
-        comboValueLabel.verticalAlignmentMode = .center
-        comboValueLabel.zPosition = 12
+        healthValueLabel.text = "100%"
+        healthValueLabel.fontSize = 21
+        healthValueLabel.fontColor = .white
+        healthValueLabel.horizontalAlignmentMode = .center
+        healthValueLabel.verticalAlignmentMode = .center
+        healthValueLabel.zPosition = 12
 
-        for offset in comboOutlineOffsets {
-            let outline = SKLabelNode(fontNamed: "Menlo-Bold")
-            outline.text = "0"
-            outline.fontSize = 36
-            outline.fontColor = .black.withAlphaComponent(0.85)
-            outline.horizontalAlignmentMode = .center
-            outline.verticalAlignmentMode = .center
-            outline.position = offset
-            outline.zPosition = 11.9
-            comboOutlineLabels.append(outline)
-            addChild(outline)
-        }
+        scoreIconLabel.text = "★"
+        scoreIconLabel.fontSize = 18
+        scoreIconLabel.fontColor = .white
+        scoreIconLabel.horizontalAlignmentMode = .center
+        scoreIconLabel.verticalAlignmentMode = .center
+        scoreIconLabel.zPosition = 12
 
         latestJudgmentLabel.fontSize = 22
         latestJudgmentLabel.fontColor = judgmentAccentColor
@@ -1076,44 +1274,26 @@ final class GameScene: SKScene, @unchecked Sendable {
         latestJudgmentLabel.alpha = 0
         latestJudgmentLabel.zPosition = 12
 
-        scoreCaptionLabel.text = "점수"
-        scoreCaptionLabel.fontSize = 12
-        scoreCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
+        scoreCaptionLabel.text = "SCORE"
+        scoreCaptionLabel.fontSize = 9
+        scoreCaptionLabel.fontColor = SKColor.white.withAlphaComponent(0.72)
         scoreCaptionLabel.horizontalAlignmentMode = .center
         scoreCaptionLabel.verticalAlignmentMode = .center
         scoreCaptionLabel.zPosition = 12
 
-        scoreValueLabel.text = "0"
-        scoreValueLabel.fontSize = 18
+        scoreValueLabel.text = "0000000"
+        scoreValueLabel.fontSize = 15
         scoreValueLabel.fontColor = .white
         scoreValueLabel.horizontalAlignmentMode = .center
         scoreValueLabel.verticalAlignmentMode = .center
         scoreValueLabel.zPosition = 12
 
-        lifeCaptionLabel.text = "체력"
-        lifeCaptionLabel.fontSize = 12
-        lifeCaptionLabel.fontColor = .white.withAlphaComponent(0.72)
-        lifeCaptionLabel.horizontalAlignmentMode = .center
-        lifeCaptionLabel.verticalAlignmentMode = .center
-        lifeCaptionLabel.zPosition = 12
-
-        lifeGaugeTrack.fillColor = .white.withAlphaComponent(0.12)
-        lifeGaugeTrack.strokeColor = .white.withAlphaComponent(0.5)
-        lifeGaugeTrack.lineWidth = 1
-        lifeGaugeTrack.zPosition = 12
-
-        lifeGaugeFill.fillColor = .clear
-        lifeGaugeFill.strokeColor = .clear
-        lifeGaugeFill.zPosition = 13
-
-        for _ in 0..<20 {
-            let segment = SKShapeNode()
-            segment.fillColor = lifeGaugeColor(for: 1)
-            segment.strokeColor = .clear
-            segment.zPosition = 13.1
-            lifeSegmentNodes.append(segment)
-            addChild(segment)
-        }
+        scoreComboLabel.text = "0"
+        scoreComboLabel.fontSize = 18
+        scoreComboLabel.fontColor = judgmentAccentColor
+        scoreComboLabel.horizontalAlignmentMode = .center
+        scoreComboLabel.verticalAlignmentMode = .center
+        scoreComboLabel.zPosition = 12
 
         gameOverLabel.text = "게임 오버"
         gameOverLabel.fontSize = 38
@@ -1123,20 +1303,16 @@ final class GameScene: SKScene, @unchecked Sendable {
         gameOverLabel.zPosition = 14
         gameOverLabel.isHidden = true
 
-        addChild(comboPanelOuterNode)
-        addChild(comboPanelInnerNode)
-        addChild(scorePanelOuterNode)
-        addChild(scorePanelInnerNode)
-        addChild(lifePanelOuterNode)
-        addChild(lifePanelInnerNode)
-        addChild(comboCaptionLabel)
-        addChild(comboValueLabel)
+        addChild(healthRingNode)
+        addChild(scoreRingNode)
+        addChild(healthIconLabel)
+        addChild(healthCaptionLabel)
+        addChild(healthValueLabel)
+        addChild(scoreIconLabel)
         addChild(latestJudgmentLabel)
         addChild(scoreCaptionLabel)
         addChild(scoreValueLabel)
-        addChild(lifeCaptionLabel)
-        addChild(lifeGaugeTrack)
-        addChild(lifeGaugeFill)
+        addChild(scoreComboLabel)
         addChild(gameOverLabel)
     }
 
@@ -1310,6 +1486,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             rect: CGRect(origin: .zero, size: size),
             transform: nil
         )
+        updateBackgroundLayout()
         scanlineOverlayNode.size = size
         scanlineOverlayNode.position = .zero
 
@@ -1325,7 +1502,6 @@ final class GameScene: SKScene, @unchecked Sendable {
             laneCount: laneCount
         )
         perspectiveProjection = projection
-        let laneFillColor = makeColor(for: theme.laneFill)
         for (index, lane) in laneFillNodes.enumerated() {
             let path = CGMutablePath()
             path.move(to: CGPoint(
@@ -1346,10 +1522,10 @@ final class GameScene: SKScene, @unchecked Sendable {
             ))
             path.closeSubpath()
             lane.path = path
-            lane.fillColor = laneFillColor
+            lane.fillColor = makeColor(for: laneFillColor(for: index))
             lane.alpha = index.isMultiple(of: 2)
                 ? CGFloat(theme.laneFillAlpha)
-                : CGFloat(theme.laneFillAlpha * 0.6)
+                : CGFloat(theme.laneFillAlpha * 0.75)
             lanePressNodes[index].path = path
             lanePressNodes[index].fillColor = judgmentAccentColor
             laneHitEffectNodes[index].updateLayout(projection: projection)
@@ -1371,33 +1547,45 @@ final class GameScene: SKScene, @unchecked Sendable {
                 y: projection.y(at: 1)
             ))
             boundary.path = path
-            boundary.strokeColor = laneLineColor
-            boundary.lineWidth = 1
+            boundary.strokeColor = boundaryColor(for: index)
+            boundary.lineWidth = 2
+            boundary.glowWidth = 5
             boundary.alpha = CGFloat(theme.laneLineAlpha)
         }
 
         let receptorRect = CGRect(
             x: -laneWidth * 0.31,
-            y: -11,
+            y: -14,
             width: laneWidth * 0.62,
-            height: 22
+            height: 28
         )
         let receptorPath = CGPath(
             roundedRect: receptorRect,
-            cornerWidth: 8,
-            cornerHeight: 8,
+            cornerWidth: 10,
+            cornerHeight: 10,
             transform: nil
         )
+        let glyphSize = min(max(laneWidth * 0.08, 5), 8)
+        let glyphPath = CGMutablePath()
+        glyphPath.move(to: CGPoint(x: 0, y: glyphSize))
+        glyphPath.addLine(to: CGPoint(x: glyphSize, y: 0))
+        glyphPath.addLine(to: CGPoint(x: 0, y: -glyphSize))
+        glyphPath.addLine(to: CGPoint(x: -glyphSize, y: 0))
+        glyphPath.closeSubpath()
         for (index, receptor) in receptorNodes.enumerated() {
             receptor.path = receptorPath
             receptor.position = CGPoint(
                 x: laneAreaRect.minX + (CGFloat(index) + 0.5) * laneWidth,
                 y: hitLineY
             )
-            receptor.strokeColor = laneLineColor
+            receptor.fillColor = makeColor(for: theme.backgroundBottom, alpha: 0.86)
+            receptor.strokeColor = laneEdgeColor(forLane: index)
             receptor.lineWidth = 2
-            receptor.glowWidth = 0
+            receptor.glowWidth = 4
             receptor.alpha = 1
+            receptorGlyphNodes[index].path = glyphPath
+            receptorGlyphNodes[index].position = receptor.position
+            receptorGlyphNodes[index].strokeColor = laneEdgeColor(forLane: index).withAlphaComponent(0.62)
         }
 
         let rippleCenter = CGPoint(x: laneAreaRect.midX, y: size.height * 0.22)
@@ -1405,86 +1593,28 @@ final class GameScene: SKScene, @unchecked Sendable {
             ripple.position = rippleCenter
         }
 
-        let hudTopMargin = max(size.height * 0.06, 54)
-        comboValueLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin - 48)
-        for (index, outline) in comboOutlineLabels.enumerated() {
-            let offset = comboOutlineOffsets[index]
-            outline.position = CGPoint(
-                x: comboValueLabel.position.x + offset.x,
-                y: comboValueLabel.position.y + offset.y
-            )
-        }
-        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - hudTopMargin)
-        let scoreCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
-        scoreCaptionLabel.position = CGPoint(x: scoreCenterX, y: size.height * 0.10 + 16)
-        scoreValueLabel.position = CGPoint(x: scoreCenterX, y: size.height * 0.10 - 10)
-
-        let lifeCenterX = laneAreaRect.minX / 2
-        let gaugeHeight = min(max(size.height * 0.60, 120), size.height * 0.75)
-        let gaugeBottom = max((size.height - gaugeHeight) / 2, 8)
-        let gaugeRect = CGRect(x: -8, y: 0, width: 16, height: gaugeHeight)
-        let gaugeCornerRadius = min(8, min(gaugeRect.width, gaugeRect.height) / 2)
-        let gaugePath = CGPath(
-            roundedRect: gaugeRect,
-            cornerWidth: gaugeCornerRadius,
-            cornerHeight: gaugeCornerRadius,
-            transform: nil
-        )
-        lifeGaugeTrack.path = gaugePath
-        lifeGaugeFill.path = gaugePath
-        lifeGaugeTrack.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
-        lifeGaugeFill.position = CGPoint(x: lifeCenterX, y: gaugeBottom)
-        lifeCaptionLabel.position = CGPoint(x: lifeCenterX, y: gaugeBottom + gaugeHeight + 16)
-        gameOverLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height * 0.52)
-
-        let segmentGap: CGFloat = 3
-        let segmentHeight = max((gaugeHeight - segmentGap * 19) / 20, 1)
-        let segmentPath = CGPath(
-            roundedRect: CGRect(x: -8, y: 0, width: 16, height: segmentHeight),
-            cornerWidth: 4,
-            cornerHeight: 4,
-            transform: nil
-        )
-        for (index, segment) in lifeSegmentNodes.enumerated() {
-            segment.path = segmentPath
-            segment.position = CGPoint(
-                x: lifeCenterX,
-                y: gaugeBottom + CGFloat(index) * (segmentHeight + segmentGap)
-            )
-        }
-
         let gutterWidth = min(laneAreaRect.minX, size.width - laneAreaRect.maxX)
-        let gutterPanelWidth = max(min(gutterWidth - 12, 180), 104)
-        updatePanel(
-            outer: scorePanelOuterNode,
-            inner: scorePanelInnerNode,
-            rect: CGRect(
-                x: scoreCenterX - gutterPanelWidth / 2,
-                y: max(size.height * 0.03, 8),
-                width: gutterPanelWidth,
-                height: 80
-            )
-        )
-        updatePanel(
-            outer: lifePanelOuterNode,
-            inner: lifePanelInnerNode,
-            rect: CGRect(
-                x: lifeCenterX - gutterPanelWidth / 2,
-                y: max(gaugeBottom - 24, 8),
-                width: gutterPanelWidth,
-                height: gaugeHeight + 60
-            )
-        )
-        updatePanel(
-            outer: comboPanelOuterNode,
-            inner: comboPanelInnerNode,
-            rect: CGRect(
-                x: laneAreaRect.midX - 100,
-                y: max(size.height - hudTopMargin - 84, 8),
-                width: 200,
-                height: 100
-            )
-        )
+        let gaugeDiameter = min(max(gutterWidth - 12, 105), 128)
+        let gaugeY = size.height * 0.50
+        let healthCenterX = laneAreaRect.minX / 2
+        let scoreCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
+        let healthCenter = CGPoint(x: healthCenterX, y: gaugeY)
+        let scoreCenter = CGPoint(x: scoreCenterX, y: gaugeY)
+        let gaugeCoreColor = makeColor(for: theme.backgroundBottom, alpha: 0.94)
+        healthRingNode.position = healthCenter
+        scoreRingNode.position = scoreCenter
+        healthRingNode.updateLayout(diameter: gaugeDiameter, coreColor: gaugeCoreColor)
+        scoreRingNode.updateLayout(diameter: gaugeDiameter, coreColor: gaugeCoreColor)
+
+        healthIconLabel.position = CGPoint(x: healthCenterX, y: gaugeY + gaugeDiameter * 0.19)
+        healthCaptionLabel.position = CGPoint(x: healthCenterX, y: gaugeY + gaugeDiameter * 0.03)
+        healthValueLabel.position = CGPoint(x: healthCenterX, y: gaugeY - gaugeDiameter * 0.18)
+        scoreIconLabel.position = CGPoint(x: scoreCenterX, y: gaugeY + gaugeDiameter * 0.20)
+        scoreCaptionLabel.position = CGPoint(x: scoreCenterX, y: gaugeY + gaugeDiameter * 0.04)
+        scoreValueLabel.position = CGPoint(x: scoreCenterX, y: gaugeY - gaugeDiameter * 0.08)
+        scoreComboLabel.position = CGPoint(x: scoreCenterX, y: gaugeY - gaugeDiameter * 0.29)
+        latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - max(size.height * 0.06, 54))
+        gameOverLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height * 0.52)
 
         for node in noteNodes {
             node.updateLayout(
@@ -1525,25 +1655,6 @@ final class GameScene: SKScene, @unchecked Sendable {
         )
         tapNoteTextureCache.setObject(texture, forKey: key)
         return texture
-    }
-
-    private func updatePanel(
-        outer: SKShapeNode,
-        inner: SKShapeNode,
-        rect: CGRect
-    ) {
-        outer.path = CGPath(
-            roundedRect: rect,
-            cornerWidth: 8,
-            cornerHeight: 8,
-            transform: nil
-        )
-        inner.path = CGPath(
-            roundedRect: rect.insetBy(dx: 5, dy: 5),
-            cornerWidth: 5,
-            cornerHeight: 5,
-            transform: nil
-        )
     }
 
     private func frameDelta(at currentTime: TimeInterval) -> TimeInterval {
@@ -1623,8 +1734,8 @@ final class GameScene: SKScene, @unchecked Sendable {
             receptorFlashRemaining[index] = remaining
             let receptor = receptorNodes[index]
             if remaining == 0 {
-                receptor.strokeColor = laneLineColor
-                receptor.glowWidth = 0
+                receptor.strokeColor = laneEdgeColor(forLane: index)
+                receptor.glowWidth = 4
                 receptor.alpha = 1
             } else {
                 receptor.strokeColor = judgmentAccentColor
@@ -1652,16 +1763,65 @@ final class GameScene: SKScene, @unchecked Sendable {
         return CGFloat(total / Float(end - start))
     }
 
+    private func laneFillColor(for lane: Int) -> RGB {
+        let edge = lane.isMultiple(of: 2) ? theme.laneEdgeA : theme.laneEdgeB
+        return blend(theme.laneFill, edge, amount: 0.24)
+    }
+
+    private func laneEdgeColor(forLane lane: Int) -> SKColor {
+        lane.isMultiple(of: 2) ? laneEdgeAColor : laneEdgeBColor
+    }
+
+    private func boundaryColor(for index: Int) -> SKColor {
+        guard index != 0, index != laneCount else {
+            return laneEdgeAColor
+        }
+        return index.isMultiple(of: 2) ? laneEdgeAColor : laneEdgeBColor
+    }
+
+    private func updateBackgroundLayout() {
+        for (index, anchor) in starAnchors.enumerated() where starNodes.indices.contains(index) {
+            starNodes[index].position = CGPoint(
+                x: size.width * anchor.x,
+                y: size.height * anchor.y
+            )
+        }
+
+        let baseY = size.height * 0.25
+        let heights: [CGFloat] = [
+            0.08, 0.14, 0.10, 0.20, 0.12, 0.18, 0.11, 0.16,
+            0.09, 0.19, 0.13, 0.17, 0.10, 0.15, 0.08, 0.12
+        ]
+        let buildingWidth = size.width / CGFloat(heights.count)
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: 0, y: baseY))
+        for (index, height) in heights.enumerated() {
+            let x = CGFloat(index) * buildingWidth
+            let top = baseY + size.height * height
+            path.addLine(to: CGPoint(x: x, y: top))
+            path.addLine(to: CGPoint(x: x + buildingWidth * 0.72, y: top))
+            path.addLine(to: CGPoint(x: x + buildingWidth * 0.72, y: baseY))
+            path.addLine(to: CGPoint(x: x + buildingWidth, y: baseY))
+        }
+        path.addLine(to: CGPoint(x: size.width, y: 0))
+        path.closeSubpath()
+        citySilhouetteNode.path = path
+    }
+
     private func gradientColor(at progress: CGFloat) -> SKColor {
         let amount = min(max(progress, 0), 1)
         let top = theme.backgroundTop
+        let mid = Self.neonSkyMid
         let bottom = theme.backgroundBottom
+        let color: RGB
+        if amount < 0.42 {
+            color = blend(bottom, mid, amount: Double(amount / 0.42))
+        } else {
+            color = blend(mid, top, amount: Double((amount - 0.42) / 0.58))
+        }
         return makeColor(
-            for: RGB(
-                r: bottom.r + (top.r - bottom.r) * Double(amount),
-                g: bottom.g + (top.g - bottom.g) * Double(amount),
-                b: bottom.b + (top.b - bottom.b) * Double(amount)
-            )
+            for: color
         )
     }
 
@@ -1810,10 +1970,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         latestJudgmentLabel.alpha = 1
         latestJudgmentTime = time
         comboPulseRemaining = 0.18
-        comboValueLabel.setScale(1.12)
-        for outline in comboOutlineLabels {
-            outline.setScale(1.12)
-        }
+        scoreComboLabel.setScale(1.12)
     }
 
     private func updateJudgmentLabel(at time: TimeInterval) {
@@ -1850,17 +2007,14 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         laneHitEffectNodes[lane].trigger(
             at: receptorPoint(for: lane),
-            color: judgmentColor(for: judgment)
+            color: judgmentAccentColor
         )
     }
 
     private func updateHUD() {
         let combo = judgmentEngine.combo
         if combo != lastRenderedCombo {
-            comboValueLabel.text = "\(combo)"
-            for outline in comboOutlineLabels {
-                outline.text = "\(combo)"
-            }
+            scoreComboLabel.text = "\(combo)"
             lastRenderedCombo = combo
         }
 
@@ -1871,54 +2025,17 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         let life = judgmentEngine.life
-        if life <= 0 {
-            lifeGaugeFill.yScale = 0
-            lifeGaugeFill.isHidden = true
-            for segment in lifeSegmentNodes {
-                segment.isHidden = true
-            }
-            lastRenderedLife = life
-        } else if life != lastRenderedLife {
-            let fraction = CGFloat(life) / 100
-            lifeGaugeFill.xScale = 1
-            lifeGaugeFill.yScale = 1
-            lifeGaugeFill.isHidden = false
-            let filledSegmentCount = min(max(life / 5, 0), lifeSegmentNodes.count)
-            let color = lifeGaugeColor(for: fraction)
-            for (index, segment) in lifeSegmentNodes.enumerated() {
-                segment.fillColor = color
-                segment.isHidden = index >= filledSegmentCount
-            }
+        if life != lastRenderedLife {
+            let fraction = CGFloat(max(life, 0)) / 100
+            healthValueLabel.text = "\(max(life, 0))%"
+            healthRingNode.update(progress: fraction, warning: life < 25)
             lastRenderedLife = life
         }
 
         comboPulseRemaining = max(comboPulseRemaining - lastFrameDelta, 0)
         let pulse = comboPulseRemaining / 0.18
         let scale = 1 + 0.12 * CGFloat(pulse)
-        comboValueLabel.setScale(scale)
-        for outline in comboOutlineLabels {
-            outline.setScale(scale)
-        }
-    }
-
-    private func lifeGaugeColor(for fraction: CGFloat) -> SKColor {
-        if fraction >= 0.5 {
-            let progress = (fraction - 0.5) * 2
-            return SKColor(
-                red: 1 - 0.8 * progress,
-                green: 0.72 + 0.18 * progress,
-                blue: 0.18 + 0.17 * progress,
-                alpha: 1
-            )
-        }
-
-        let progress = fraction * 2
-        return SKColor(
-            red: 1,
-            green: 0.12 + 0.60 * progress,
-            blue: 0.10 + 0.08 * progress,
-            alpha: 1
-        )
+        scoreComboLabel.setScale(scale)
     }
 
     private func judgmentColor(for judgment: Judgment) -> SKColor {

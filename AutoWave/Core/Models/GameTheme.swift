@@ -31,6 +31,8 @@ struct GameTheme: Codable, Sendable, Equatable {
     var laneFillAlpha: Double
     var laneLine: RGB
     var laneLineAlpha: Double
+    var laneEdgeA: RGB
+    var laneEdgeB: RGB
     var tapNote: RGB
     var tapNoteStroke: RGB
     var dragBody: RGB
@@ -42,28 +44,32 @@ struct GameTheme: Codable, Sendable, Equatable {
         GameTheme(
             id: "deepSea",
             displayName: "심해",
-            backgroundTop: RGB(hex: 0x070B26),
-            backgroundBottom: RGB(hex: 0x17103F),
+            backgroundTop: RGB(hex: 0x050617),
+            backgroundBottom: RGB(hex: 0x08091D),
             laneFill: RGB(hex: 0x283593),
             laneFillAlpha: 0.18,
-            laneLine: RGB(hex: 0x7986CB),
+            laneLine: RGB(hex: 0xA855F7),
             laneLineAlpha: 0.72,
-            tapNote: RGB(hex: 0x4FC3F7),
+            laneEdgeA: RGB(hex: 0xF048C6),
+            laneEdgeB: RGB(hex: 0x38BDF8),
+            tapNote: RGB(hex: 0x38BDF8),
             tapNoteStroke: RGB(hex: 0xFFFFFF),
             dragBody: RGB(hex: 0x7E57C2),
             dragCap: RGB(hex: 0xB39DDB),
             ripple: RGB(hex: 0x283593),
-            judgmentAccent: RGB(hex: 0xFFD54F)
+            judgmentAccent: RGB(hex: 0xA855F7)
         ),
         GameTheme(
             id: "neonRush",
             displayName: "네온 러시",
-            backgroundTop: RGB(hex: 0x16001F),
-            backgroundBottom: RGB(hex: 0x300046),
+            backgroundTop: RGB(hex: 0x240D3B),
+            backgroundBottom: RGB(hex: 0x090516),
             laneFill: RGB(hex: 0x6A1B9A),
             laneFillAlpha: 0.18,
             laneLine: RGB(hex: 0xE040FB),
             laneLineAlpha: 0.72,
+            laneEdgeA: RGB(hex: 0xF048C6),
+            laneEdgeB: RGB(hex: 0xA855F7),
             tapNote: RGB(hex: 0xFF4081),
             tapNoteStroke: RGB(hex: 0xFFFFFF),
             dragBody: RGB(hex: 0x00E5FF),
@@ -74,12 +80,14 @@ struct GameTheme: Codable, Sendable, Equatable {
         GameTheme(
             id: "tide",
             displayName: "파도",
-            backgroundTop: RGB(hex: 0x03242C),
-            backgroundBottom: RGB(hex: 0x0A4A55),
+            backgroundTop: RGB(hex: 0x14333C),
+            backgroundBottom: RGB(hex: 0x071719),
             laneFill: RGB(hex: 0x00695C),
             laneFillAlpha: 0.18,
             laneLine: RGB(hex: 0x4DD0E1),
             laneLineAlpha: 0.72,
+            laneEdgeA: RGB(hex: 0x38BDF8),
+            laneEdgeB: RGB(hex: 0x34D399),
             tapNote: RGB(hex: 0xFFB74D),
             tapNoteStroke: RGB(hex: 0xFFF3E0),
             dragBody: RGB(hex: 0x26C6DA),
@@ -90,12 +98,14 @@ struct GameTheme: Codable, Sendable, Equatable {
         GameTheme(
             id: "dawn",
             displayName: "새벽",
-            backgroundTop: RGB(hex: 0x191223),
-            backgroundBottom: RGB(hex: 0x38284C),
+            backgroundTop: RGB(hex: 0x3B2038),
+            backgroundBottom: RGB(hex: 0x110911),
             laneFill: RGB(hex: 0x5E35B1),
             laneFillAlpha: 0.18,
             laneLine: RGB(hex: 0xCE93D8),
             laneLineAlpha: 0.72,
+            laneEdgeA: RGB(hex: 0xF0ABFC),
+            laneEdgeB: RGB(hex: 0xA855F7),
             tapNote: RGB(hex: 0xFFCA7A),
             tapNoteStroke: RGB(hex: 0xFFF8E1),
             dragBody: RGB(hex: 0xF48FB1),
@@ -106,12 +116,14 @@ struct GameTheme: Codable, Sendable, Equatable {
         GameTheme(
             id: "prism",
             displayName: "백광",
-            backgroundTop: RGB(hex: 0x0F1216),
-            backgroundBottom: RGB(hex: 0x1B222E),
+            backgroundTop: RGB(hex: 0x28284F),
+            backgroundBottom: RGB(hex: 0x0B0B17),
             laneFill: RGB(hex: 0x37474F),
             laneFillAlpha: 0.18,
             laneLine: RGB(hex: 0xB0BEC5),
             laneLineAlpha: 0.72,
+            laneEdgeA: RGB(hex: 0xF4F4FF),
+            laneEdgeB: RGB(hex: 0x38BDF8),
             tapNote: RGB(hex: 0xE8F6FF),
             tapNoteStroke: RGB(hex: 0x90CAF9),
             dragBody: RGB(hex: 0x80DEEA),
