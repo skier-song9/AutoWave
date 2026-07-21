@@ -85,28 +85,28 @@ final class GameplayRulesTests: XCTestCase {
         XCTAssertTrue(screenYDelta[2] < screenYDelta[3])
     }
 
-    func testLaneAreaUsesSeventyPercentOfSceneWidth() {
+    func testLaneAreaUsesNinetyPercentOfSceneWidth() {
         let rect = GameplayLayout.laneAreaRect(in: CGSize(width: 1_000, height: 500))
 
-        XCTAssertEqual(rect.width, 700, accuracy: 0.001)
+        XCTAssertEqual(rect.width, 900, accuracy: 0.001)
         XCTAssertEqual(rect.midX, 500, accuracy: 0.001)
     }
 
-    func testLaneCoordinateRejectsScoreAndLifeGutters() {
+    func testLaneCoordinateRejectsPointsBeyondHalfLaneOutsideField() {
         let size = CGSize(width: 1_000, height: 500)
         let laneArea = GameplayLayout.laneAreaRect(in: size)
         let laneWidth = laneArea.width / 4
 
         XCTAssertNil(
             GameplayLayout.laneCoordinate(
-                for: CGPoint(x: 40, y: 250),
+                for: CGPoint(x: laneArea.minX - laneWidth * 0.5 - 1, y: 250),
                 in: laneArea,
                 laneWidth: laneWidth
             )
         )
         XCTAssertNil(
             GameplayLayout.laneCoordinate(
-                for: CGPoint(x: 960, y: 250),
+                for: CGPoint(x: laneArea.maxX + laneWidth * 0.5 + 1, y: 250),
                 in: laneArea,
                 laneWidth: laneWidth
             )

@@ -89,7 +89,7 @@ final class PlaybackClock: @unchecked Sendable {
 }
 
 final class NoteSpeedMultiplierState: @unchecked Sendable {
-    static let allowedValues: [CGFloat] = [0.5, 0.75, 1.0, 1.5]
+    static let allowedValues: [CGFloat] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
     private var storedValue: CGFloat
     private var lock = os_unfair_lock_s()
@@ -105,16 +105,6 @@ final class NoteSpeedMultiplierState: @unchecked Sendable {
     func set(_ value: CGFloat) {
         withLock {
             storedValue = value
-        }
-    }
-
-    func cycle() -> CGFloat {
-        withLock {
-            let currentIndex = Self.allowedValues.firstIndex {
-                abs($0 - storedValue) < 0.000_001
-            } ?? 2
-            storedValue = Self.allowedValues[(currentIndex + 1) % Self.allowedValues.count]
-            return storedValue
         }
     }
 
@@ -144,7 +134,6 @@ final class GameplayViewModel {
     private(set) var saveErrorMessage: String?
     private(set) var isPaused = false
     private(set) var countdown: Int?
-    private(set) var speedStateRevision = 0
 
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioFile: AVAudioFile?
@@ -171,10 +160,6 @@ final class GameplayViewModel {
 
     var scene: GameScene? {
         gameplayScene
-    }
-
-    var noteSpeedMultiplier: Double {
-        Double(noteSpeedState.value)
     }
 
     func start(
@@ -236,7 +221,6 @@ final class GameplayViewModel {
             countdown = nil
             saveErrorMessage = nil
             noteSpeedState.set(CGFloat(speedMultiplier))
-            speedStateRevision &+= 1
             let speedState = noteSpeedState
             gameplayScene = GameScene(
                 beatmap: decodedBeatmap,
@@ -276,24 +260,6 @@ final class GameplayViewModel {
 
     func currentPlaybackTime() -> TimeInterval {
         playbackClock?.currentTime ?? 0
-    }
-
-    func cycleNoteSpeedMultiplier(in context: ModelContext) {
-        guard state == .ready else { return }
-
-        let multiplier = Double(noteSpeedState.cycle())
-        speedStateRevision &+= 1
-        persistNoteSpeedMultiplier(multiplier, in: context)
-    }
-
-    private func persistNoteSpeedMultiplier(_ multiplier: Double, in context: ModelContext) {
-        let profile = ProfileEntity.current(in: context)
-        profile.noteSpeedMultiplier = multiplier
-        do {
-            try context.save()
-        } catch {
-            saveErrorMessage = "배속 설정을 저장하지 못했어요"
-        }
     }
 
     func pause() {

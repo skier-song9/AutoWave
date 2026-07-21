@@ -1183,7 +1183,7 @@ final class GameScene: SKScene, @unchecked Sendable {
             lanePressNodes.append(press)
             addChild(press)
 
-            let hitEffect = LaneHitEffectNode(lane: laneFillNodes.count - 1, color: judgmentAccentColor)
+            let hitEffect = LaneHitEffectNode(lane: index, color: hitEffectColor(forLane: index))
             laneHitEffectNodes.append(hitEffect)
             addChild(hitEffect)
 
@@ -1593,11 +1593,19 @@ final class GameScene: SKScene, @unchecked Sendable {
             ripple.position = rippleCenter
         }
 
-        let gutterWidth = min(laneAreaRect.minX, size.width - laneAreaRect.maxX)
-        let gaugeDiameter = min(max(gutterWidth - 12, 105), 128)
-        let gaugeY = size.height * 0.50
-        let healthCenterX = laneAreaRect.minX / 2
-        let scoreCenterX = laneAreaRect.maxX + (size.width - laneAreaRect.maxX) / 2
+        let gaugeDiameter = min(105, size.height * 0.34)
+        let gaugeRadius = gaugeDiameter / 2
+        let gaugeY = size.height - (gaugeRadius + 56)
+        let travelHeight = max(size.height - hitLineY, 1)
+        let normalizedDepth = min(max((size.height - gaugeY) / travelHeight, 0), 1)
+        let topScale = PerspectiveProjection.defaultTopScale
+        let laneScaleAtGauge = topScale + normalizedDepth * (1 - topScale)
+        let laneEdgeXAtGauge = laneAreaRect.midX - laneAreaRect.width * laneScaleAtGauge / 2
+        let healthCenterX = min(
+            max(laneEdgeXAtGauge / 2, gaugeRadius + 12),
+            laneAreaRect.midX
+        )
+        let scoreCenterX = size.width - healthCenterX
         let healthCenter = CGPoint(x: healthCenterX, y: gaugeY)
         let scoreCenter = CGPoint(x: scoreCenterX, y: gaugeY)
         let gaugeCoreColor = makeColor(for: theme.backgroundBottom, alpha: 0.94)
@@ -1770,6 +1778,23 @@ final class GameScene: SKScene, @unchecked Sendable {
 
     private func laneEdgeColor(forLane lane: Int) -> SKColor {
         lane.isMultiple(of: 2) ? laneEdgeAColor : laneEdgeBColor
+    }
+
+    private func hitEffectColor(forLane lane: Int) -> SKColor {
+        let base = laneEdgeColor(forLane: lane)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return base
+        }
+        return SKColor(
+            hue: hue,
+            saturation: saturation * 0.80,
+            brightness: min(brightness * 1.18, 1),
+            alpha: 1
+        )
     }
 
     private func boundaryColor(for index: Int) -> SKColor {
@@ -2007,7 +2032,7 @@ final class GameScene: SKScene, @unchecked Sendable {
 
         laneHitEffectNodes[lane].trigger(
             at: receptorPoint(for: lane),
-            color: judgmentAccentColor
+            color: hitEffectColor(forLane: lane)
         )
     }
 

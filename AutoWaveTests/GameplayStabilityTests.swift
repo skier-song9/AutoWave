@@ -57,11 +57,18 @@ final class GameplayStabilityTests: XCTestCase {
         XCTAssertTrue(scene.view?.isMultipleTouchEnabled == true)
     }
 
-    func testCycleActionMutatesSharedNoteSpeedSourceOfTruth() {
+    func testAllowedNoteSpeedValuesMatchReadyModalOptions() {
+        XCTAssertEqual(
+            NoteSpeedMultiplierState.allowedValues,
+            [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+        )
+    }
+
+    func testSetMutatesSharedNoteSpeedSourceOfTruth() {
         let speedState = NoteSpeedMultiplierState(1.0)
 
-        XCTAssertEqual(speedState.cycle(), 1.5, accuracy: 0.001)
-        XCTAssertEqual(speedState.value, 1.5, accuracy: 0.001)
+        speedState.set(2.0)
+        XCTAssertEqual(speedState.value, 2.0, accuracy: 0.001)
     }
 
     func testScenePollsChangedMultiplierWithoutRecreatingScene() {

@@ -303,8 +303,8 @@ struct ReadyModal: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let cardWidth = min(proxy.size.width * 0.85, 760)
-            let cardHeight = min(proxy.size.height * 0.85, 340)
+            let cardWidth = min(proxy.size.width * 0.9, 760)
+            let cardHeight = min(proxy.size.height * 0.88, 344)
 
             ZStack {
                 Color.black.opacity(0.68)
@@ -314,12 +314,8 @@ struct ReadyModal: View {
                     albumPanel
                         .frame(width: min(max(cardWidth * 0.27, 170), 195))
 
-                    ScrollView(.vertical, showsIndicators: false) {
-                        settingsColumn
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.trailing, 6)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    settingsColumn
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
                 .padding(14)
                 .frame(width: cardWidth, height: cardHeight)
@@ -375,18 +371,6 @@ struct ReadyModal: View {
                         .stroke(AppTheme.text.opacity(0.18), lineWidth: 1)
                         .padding(18)
                 }
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppTheme.text)
-                        .frame(width: 42, height: 42)
-                        .background(AppTheme.backgroundElevated, in: Circle())
-                        .overlay {
-                            Circle()
-                                .strokeBorder(AppTheme.accentGradient, lineWidth: 2)
-                        }
-                        .padding(12)
-                }
                 .frame(height: 112)
                 .shadow(color: AppTheme.accentPurple.opacity(0.35), radius: 12)
 
@@ -418,39 +402,45 @@ struct ReadyModal: View {
             }
 
             settingsPanel {
-                settingCopy(
-                    title: "LANE 개수",
-                    caption: "노트가 떨어지는 라인의 개수를 설정합니다."
-                )
-                Spacer(minLength: 4)
-                HStack(spacing: 5) {
-                    ForEach(4...7, id: \.self) { value in
-                        optionChip("\(value)", selected: laneCount == value, size: 32) {
-                            laneCount = value
+                HStack(alignment: .center, spacing: 8) {
+                    settingCopy(
+                        title: "LANE 개수",
+                        caption: "노트가 떨어지는 라인의 개수를 설정합니다."
+                    )
+                    Spacer(minLength: 8)
+                    HStack(spacing: 5) {
+                        ForEach(4...7, id: \.self) { value in
+                            optionChip("\(value)", selected: laneCount == value, size: 32) {
+                                laneCount = value
+                            }
                         }
                     }
                 }
             }
 
             settingsPanel {
-                settingCopy(
-                    title: "배속",
-                    caption: "게임 속도를 설정합니다."
-                )
-                Spacer(minLength: 4)
-                HStack(spacing: 5) {
-                    ForEach(NoteSpeedMultiplierState.allowedValues, id: \.self) { value in
-                        optionChip(
-                            speedLabel(Double(value)),
-                            selected: abs(Double(speedState.value) - Double(value)) < 0.000_001,
-                            size: 32
-                        ) {
-                            selectSpeed(Double(value))
+                HStack(alignment: .center, spacing: 8) {
+                    settingCopy(
+                        title: "배속",
+                        caption: "게임 속도를 설정합니다."
+                    )
+                    Spacer(minLength: 8)
+                    HStack(spacing: 5) {
+                        ForEach(NoteSpeedMultiplierState.allowedValues, id: \.self) { value in
+                            optionChip(
+                                speedLabel(Double(value)),
+                                selected: abs(Double(speedState.value) - Double(value)) < 0.000_001,
+                                size: 32
+                            ) {
+                                selectSpeed(Double(value))
+                            }
                         }
                     }
                 }
             }
             .id(speedStateRevision)
+
+            Spacer(minLength: 4)
 
             if isStarting {
                 ProgressView("비트맵 준비 중…")
@@ -480,6 +470,7 @@ struct ReadyModal: View {
             content()
         }
         .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -494,6 +485,7 @@ struct ReadyModal: View {
             Text(caption)
                 .font(.caption2)
                 .foregroundStyle(AppTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

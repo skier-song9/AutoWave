@@ -70,7 +70,7 @@ struct PerspectiveProjection: Equatable, Sendable {
 }
 
 enum GameplayLayout {
-    static let laneWidthRatio: CGFloat = 0.70
+    static let laneWidthRatio: CGFloat = 0.90
 
     static func laneAreaRect(in size: CGSize) -> CGRect {
         let width = size.width * laneWidthRatio

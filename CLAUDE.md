@@ -4,23 +4,26 @@ iOS rhythm game that auto-generates playable beatmaps from user-provided audio.
 Landscape gameplay: notes fall from the top of the screen and are tapped/dragged in
 time with the music. See `docs/plans/` for the current implementation plan.
 
-## Collaboration model (Claude ↔ Codex)
+## Collaboration model (Claude ↔ subagents)
 
 Roles are fixed for this project:
 
-- **Claude (this CLI)**: planning, architecture, task breakdown, prompt writing,
-  diff review, build verification, git commits. Claude does NOT write feature code.
-- **Codex**: all code writing and file writing. Invoked through the
-  `codex:codex-rescue` subagent with **`--model gpt-5.6-luna --effort xhigh --write`**
-  on every implementation handoff. One task per handoff.
+- **Claude (main thread)**: planning, architecture, task breakdown, prompt
+  writing, diff review, build verification, git commits.
+- **Subagents (Agent tool)**: all feature code writing. One task per subagent;
+  parallel subagents only on disjoint file sets.
 
 Handoff protocol:
 
-1. Claude picks the next plan task and writes a self-contained prompt: goal, exact
-   file paths, acceptance criteria, constraints from this file and AGENTS.md.
-2. Codex implements. Codex must not commit; it only edits the working tree.
-3. Claude reviews `git diff`, runs the build gate (below), requests fixes via a
-   follow-up Codex call (`--resume`) if needed, then commits.
+1. Claude writes a self-contained prompt per task: goal, exact file paths,
+   acceptance criteria, constraints from this file.
+2. The subagent implements in the working tree; it does not commit and does not
+   run xcodebuild (Claude runs the single build gate to avoid concurrent builds).
+3. Claude reviews `git diff`, runs the build gate and tests, fixes or
+   re-dispatches as needed, then commits.
+
+(Historical: earlier tasks were implemented via the Codex CLI
+`codex:codex-rescue` handoff flow; that flow is retired.)
 
 ## Build & verification
 

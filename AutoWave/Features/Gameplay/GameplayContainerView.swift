@@ -115,7 +115,6 @@ private struct GameplaySessionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: GameplayViewModel
     @State private var isPauseMenuPresented = false
-    @State private var speedFlash = false
 
     private let onComplete: (GameplaySummary) -> Void
     private let onRestart: () -> Void
@@ -204,14 +203,11 @@ private struct GameplaySessionView: View {
                     .zIndex(0)
 
                 if !isPauseMenuPresented && !viewModel.isPaused {
-                    VStack(alignment: .trailing, spacing: 8) {
-                        speedControl
-                        pauseButton
-                    }
-                    .safeAreaPadding(.top, 18)
-                    .safeAreaPadding(.trailing, 18)
-                    .zIndex(20)
-                    .allowsHitTesting(true)
+                    pauseButton
+                        .safeAreaPadding(.top, 18)
+                        .safeAreaPadding(.trailing, 18)
+                        .zIndex(20)
+                        .allowsHitTesting(true)
                 }
             }
             .overlay {
@@ -232,24 +228,6 @@ private struct GameplaySessionView: View {
         .accessibilityLabel("일시정지")
         .contentShape(Rectangle())
         .frame(width: 72, height: 72)
-    }
-
-    private var speedControl: some View {
-        CircleIconButton(systemName: "speedometer", compact: true) {
-            cycleSpeed()
-        }
-        .accessibilityLabel("노트 배속 변경")
-        .accessibilityValue(speedLabel(viewModel.noteSpeedMultiplier))
-        .frame(width: 72, height: 72)
-        .contentShape(Rectangle())
-        .background(
-            Circle()
-                .fill(speedFlash ? AppTheme.accentPurple.opacity(0.28) : Color.clear)
-        )
-        .scaleEffect(speedFlash ? 1.08 : 1)
-        .animation(.easeOut(duration: 0.16), value: speedFlash)
-        .zIndex(21)
-        .allowsHitTesting(true)
     }
 
     private var pauseOverlay: some View {
@@ -301,23 +279,5 @@ private struct GameplaySessionView: View {
         guard viewModel.state == .ready else { return }
         viewModel.pause()
         isPauseMenuPresented = viewModel.isPaused
-    }
-
-    private func cycleSpeed() {
-        viewModel.cycleNoteSpeedMultiplier(in: modelContext)
-        withAnimation(.easeOut(duration: 0.12)) {
-            speedFlash = true
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            withAnimation(.easeOut(duration: 0.22)) {
-                speedFlash = false
-            }
-        }
-    }
-
-    private func speedLabel(_ value: CGFloat) -> String {
-        String(format: "x%.2f", Double(value))
-            .replacingOccurrences(of: "0$", with: "", options: .regularExpression)
     }
 }

@@ -151,7 +151,9 @@ struct SongSelectView: View {
     private func carousel(in size: CGSize) -> some View {
         let focusedDiameter = min(214, size.height * 0.56)
         let neighborDiameter = focusedDiameter * 0.565
-        let step = max(neighborDiameter * 0.72, 78)
+        // Neighbors must fully clear the focused disc: sum of radii plus a gap.
+        // Neighbors getting cut by the screen edge is intentional (ref1).
+        let step = (focusedDiameter + neighborDiameter) / 2 + 12
 
         return ZStack {
             ForEach(Array(tracks.enumerated()), id: \.offset) { index, track in
@@ -168,7 +170,8 @@ struct SongSelectView: View {
                             track: track,
                             diameter: distance == 0 ? focusedDiameter : neighborDiameter,
                             focused: distance == 0,
-                            page: focusedIndex
+                            pageIndex: focusedIndex,
+                            pageCount: tracks.count
                         )
                     }
                     .buttonStyle(.plain)
@@ -337,82 +340,53 @@ private struct AlbumDisc: View {
     let track: TrackEntity
     let diameter: CGFloat
     let focused: Bool
-    let page: Int
+    let pageIndex: Int
+    let pageCount: Int
 
     var body: some View {
+        // Every fill/scrim/text layer is composed first, then clipped to a
+        // circle. Glow shadows are applied AFTER the circular clip so they
+        // follow the disc silhouette — never a rectangular frame. The only
+        // elements outside the circle are the soft glow and the sparkles.
         ZStack(alignment: .bottom) {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [trackColor, AppTheme.accentPurple, AppTheme.background],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay {
-                    if focused {
-                        Circle()
-                            .strokeBorder(AppTheme.accentGradient, lineWidth: 3)
-                    } else {
-                        Circle()
-                            .strokeBorder(AppTheme.text.opacity(0.76), lineWidth: 1)
-                    }
-                }
-                .overlay {
-                    Circle()
-                        .stroke(AppTheme.text.opacity(0.16), lineWidth: 1)
-                        .padding(diameter * 0.07)
-                }
-                .shadow(
-                    color: focused ? AppTheme.accentPurple.opacity(0.75) : .black.opacity(0.24),
-                    radius: focused ? 26 : 10
-                )
+            LinearGradient(
+                colors: [trackColor, AppTheme.accentPurple, AppTheme.background],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
 
             LinearGradient(
                 colors: [.clear, AppTheme.background.opacity(focused ? 0.86 : 0.72)],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .clipShape(Circle())
 
-            VStack(spacing: focused ? 4 : 2) {
-                Text(track.title)
-                    .font(.system(size: focused ? 17 : 10, weight: .bold))
-                    .lineLimit(1)
-
-                Text("로컬 음원 · \(formattedDuration(track.duration))")
-                    .font(.system(size: focused ? 11 : 8, design: .rounded))
-                    .foregroundStyle(AppTheme.mutedBright)
-                    .lineLimit(1)
-
-                if focused {
-                    if let difficulty = highestDifficulty {
-                        HStack(spacing: 5) {
-                            Image(systemName: "chart.bar.fill")
-                                .font(.system(size: 9, weight: .bold))
-                            Text(difficulty.rawValue.uppercased())
-                                .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                        }
-                        .foregroundStyle(difficulty.tint)
-                    }
-
-                    HStack(spacing: 4) {
-                        ForEach(0..<5, id: \.self) { index in
-                            Circle()
-                                .fill(index == page % 5 ? .white : AppTheme.muted)
-                                .frame(width: 4, height: 4)
-                                .shadow(color: index == page % 5 ? .white : .clear, radius: 5)
-                        }
-                    }
-                    .padding(.top, 2)
-                }
-            }
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, focused ? 12 : 7)
-            .padding(.bottom, focused ? 18 : 13)
-            .shadow(color: AppTheme.background, radius: 7)
+            discCopy
         }
         .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
+        .overlay {
+            Circle()
+                .stroke(AppTheme.text.opacity(0.16), lineWidth: 1)
+                .padding(diameter * 0.07)
+        }
+        .overlay {
+            if focused {
+                Circle()
+                    .strokeBorder(AppTheme.accentGradient, lineWidth: 3)
+            } else {
+                Circle()
+                    .strokeBorder(AppTheme.text.opacity(0.76), lineWidth: 1)
+            }
+        }
+        .shadow(
+            color: focused ? AppTheme.accentPurple.opacity(0.75) : .black.opacity(0.24),
+            radius: focused ? 26 : 10
+        )
+        .shadow(
+            color: focused ? AppTheme.accentBlue.opacity(0.45) : .clear,
+            radius: focused ? 40 : 0
+        )
         .overlay(alignment: .topLeading) {
             if focused {
                 ForEach(Array([(CGFloat(0.20), CGFloat(0.10)), (CGFloat(0.84), CGFloat(0.24)), (CGFloat(0.74), CGFloat(0.83)), (CGFloat(0.08), CGFloat(0.66))].enumerated()), id: \.offset) { _, point in
@@ -421,7 +395,50 @@ private struct AlbumDisc: View {
                 }
             }
         }
-        .clipped()
+    }
+
+    private var discCopy: some View {
+        VStack(spacing: focused ? 4 : 2) {
+            Text(track.title)
+                .font(.system(size: focused ? 17 : 10, weight: .bold))
+                .lineLimit(1)
+
+            Text("로컬 음원 · \(formattedDuration(track.duration))")
+                .font(.system(size: focused ? 11 : 8, design: .rounded))
+                .foregroundStyle(AppTheme.mutedBright)
+                .lineLimit(1)
+
+            if focused {
+                if let difficulty = highestDifficulty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chart.bar.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(difficulty.rawValue.uppercased())
+                            .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                    }
+                    .foregroundStyle(difficulty.tint)
+                }
+
+                if pageCount >= 2 {
+                    let dotCount = min(pageCount, 7)
+                    let activeDot = min(pageIndex, dotCount - 1)
+
+                    HStack(spacing: 4) {
+                        ForEach(0..<dotCount, id: \.self) { index in
+                            Circle()
+                                .fill(index == activeDot ? Color.white : AppTheme.muted)
+                                .frame(width: 4, height: 4)
+                                .shadow(color: index == activeDot ? .white : .clear, radius: 5)
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, focused ? 12 : 7)
+        .padding(.bottom, focused ? 18 : 13)
+        .shadow(color: AppTheme.background, radius: 7)
     }
 
     private var trackColor: Color {
