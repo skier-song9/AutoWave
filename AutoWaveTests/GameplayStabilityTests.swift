@@ -16,11 +16,10 @@ final class GameplayStabilityTests: XCTestCase {
         let renderQueue = DispatchQueue(label: "GameplayStabilityTests.initialGauge")
         renderQueue.sync { scene.update(0) }
 
-        let fill = gaugeFill(in: scene)
-        XCTAssertFalse(fill.isHidden)
-        XCTAssertEqual(fill.xScale, 1, accuracy: 0.001)
-        XCTAssertEqual(fill.yScale, 1, accuracy: 0.001)
-        XCTAssertGreaterThan(fill.path?.boundingBox.height ?? 0, 0)
+        // Ring-gauge HUD: full life renders as the "100%" health value label.
+        let label = healthValueLabel(in: scene)
+        XCTAssertFalse(label.isHidden)
+        XCTAssertEqual(label.text, "100%")
     }
 
     func testLifeZeroHidesGaugeWithoutBuildingInvalidPath() {
@@ -42,9 +41,9 @@ final class GameplayStabilityTests: XCTestCase {
         let renderQueue = DispatchQueue(label: "GameplayStabilityTests.lifeZero")
         renderQueue.sync { scene.update(1) }
 
-        let fill = gaugeFill(in: scene)
-        XCTAssertTrue(fill.isHidden)
-        XCTAssertEqual(fill.yScale, 0, accuracy: 0.001)
+        // Ring-gauge HUD: zero life renders as "0%" without any invalid-path crash.
+        let label = healthValueLabel(in: scene)
+        XCTAssertEqual(label.text, "0%")
     }
 
     func testUnderlyingViewEnablesMultitouch() {
@@ -206,9 +205,9 @@ final class GameplayStabilityTests: XCTestCase {
         )
     }
 
-    private func gaugeFill(in scene: GameScene) -> SKShapeNode {
-        scene.children.compactMap { $0 as? SKShapeNode }
-            .first { $0.zPosition == 13 }!
+    private func healthValueLabel(in scene: GameScene) -> SKLabelNode {
+        scene.children.compactMap { $0 as? SKLabelNode }
+            .first { $0.text?.hasSuffix("%") == true }!
     }
 
     private func judgmentLabel(in scene: GameScene) -> SKLabelNode {

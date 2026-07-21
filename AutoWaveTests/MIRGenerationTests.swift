@@ -151,9 +151,9 @@ final class MIRGenerationTests: XCTestCase {
                 bass: index < 4 ? 0.8 : 0.1,
                 mid: 0.6,
                 treble: 0.2,
-                centroid: index < 4 ? 110 : 440,
+                centroid: index < 4 ? 110 : 880,
                 rms: 0.5,
-                dominantFrequency: index < 4 ? 110 : 440,
+                dominantFrequency: index < 4 ? 110 : 880,
                 pitchConfidence: 0.9
             )
         }
@@ -259,7 +259,7 @@ final class MIRGenerationTests: XCTestCase {
                 treble: 0.1,
                 centroid: 440,
                 rms: 0.5,
-                dominantFrequency: index == 175 ? 160 : (index == 1_175 ? 440 : 0),
+                dominantFrequency: index == 175 ? 300 : (index == 1_175 ? 880 : 0),
                 pitchConfidence: index == 175 || index == 1_175 ? 0.9 : 0
             )
         }
@@ -448,6 +448,249 @@ final class MIRGenerationTests: XCTestCase {
         XCTAssertNotNil(json["excludedReasons"])
         XCTAssertNotNil(json["finalNotes"])
         XCTAssertNotNil(json["difficultyStatistics"])
+    }
+
+    func testHellBodyDensityDoesNotCliffAfterIntro() {
+        let analysis = makeFastSongAnalysis()
+        let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: .hell, seed: 42)
+
+        let bucketSize: TimeInterval = 5
+        let introBucketCount = 4 // 0..<20s
+        let bodyBucketCount = 8 // 20..<60s
+        var counts = Array(repeating: 0, count: introBucketCount + bodyBucketCount)
+        for note in beatmap.notes {
+            let bucket = min(counts.count - 1, max(0, Int(note.time / bucketSize)))
+            counts[bucket] += 1
+        }
+        let nps = counts.map { Double($0) / bucketSize }
+        let introMean = nps[0..<introBucketCount].reduce(0, +) / Double(introBucketCount)
+        let bodyMean = nps[introBucketCount...].reduce(0, +) / Double(bodyBucketCount)
+
+        XCTAssertGreaterThan(introMean, 0)
+        XCTAssertGreaterThanOrEqual(
+            bodyMean,
+            introMean * 0.6,
+            "Hell body density collapsed after the intro: intro nps \(introMean), body nps \(bodyMean)"
+        )
+    }
+
+    func testHellOutDensifiesHardOnMIRPath() {
+        let analysis = makeFastSongAnalysis()
+        let hell = BeatmapGenerator.generate(from: analysis, difficulty: .hell, seed: 42)
+        let hard = BeatmapGenerator.generate(from: analysis, difficulty: .hard, seed: 42)
+
+        XCTAssertGreaterThanOrEqual(
+            Double(hell.notes.count),
+            Double(hard.notes.count) * 1.10,
+            "Hell (\(hell.notes.count) notes) should out-densify hard (\(hard.notes.count) notes) by at least 10% on the same MIR fixture"
+        )
+    }
+
+    func testHellReachesSimultaneousNotesOnMIRPath() {
+        let analysis = makeFastSongAnalysis()
+        let hell = BeatmapGenerator.generate(from: analysis, difficulty: .hell, seed: 42)
+        let normal = BeatmapGenerator.generate(from: analysis, difficulty: .normal, seed: 42)
+
+        func hasSimultaneousDifferentLaneNotes(_ notes: [Note]) -> Bool {
+            Dictionary(grouping: notes, by: \.time).contains { _, group in
+                Set(group.map(\.lane)).count > 1
+            }
+        }
+
+        XCTAssertTrue(
+            hasSimultaneousDifferentLaneNotes(hell.notes),
+            "Expected at least one hell chord: two notes sharing a timestamp on different lanes"
+        )
+        XCTAssertFalse(
+            hasSimultaneousDifferentLaneNotes(normal.notes),
+            "Normal's maxSimultaneous is 1; it should never produce simultaneous notes on different lanes"
+        )
+    }
+
+    func testNpsCapHoldsOnMIRPath() {
+        let analysis = makeFastSongAnalysis()
+        for difficulty in [Difficulty.hard, .hell] {
+            let beatmap = BeatmapGenerator.generate(from: analysis, difficulty: difficulty, seed: 42)
+            let policy = analysis.configuration.policy(for: difficulty)
+            // BeatmapGenerator enforces Int(ceil(policy.npsCap)) as the actual per-second
+            // integer budget (see BeatmapGenerator.generate); mirror that here rather than
+            // the fractional npsCap, which cullByRate can never hit exactly.
+            let cap = Int(ceil(policy.npsCap))
+            let times = beatmap.notes.map(\.time).sorted()
+
+            for start in times {
+                let count = times.filter { $0 >= start - 1e-9 && $0 < start + 1 - 1e-9 }.count
+                XCTAssertLessThanOrEqual(
+                    count,
+                    cap,
+                    "\(difficulty) exceeds its nps cap (\(policy.npsCap)) in the window starting at \(start)"
+                )
+            }
+        }
+    }
+
+    func testStoredAnalysisDecodesLegacyDifficultyLayerPolicyJSON() throws {
+        // Simulates a TrackEntity.analysisData payload persisted before maxSimultaneous /
+        // minimumSequentialGap existed on DifficultyLayerPolicy. AnalysisResult's
+        // schemaVersion gate would previously let this reach the nested decode, which
+        // then failed (missing keys) and silently discarded the cached analysis.
+        let legacyJSON = """
+        {
+            "schemaVersion": 3,
+            "duration": 8,
+            "tempo": 120,
+            "onsets": [],
+            "meanBass": 0.1,
+            "meanMid": 0.2,
+            "meanTreble": 0.3,
+            "meanRMS": 0.4,
+            "configuration": {
+                "onsetConfidenceThreshold": 0.22,
+                "beatSnapTolerance": 0.06,
+                "subdivisionPolicy": [
+                    {
+                        "difficulty": "hard",
+                        "activeRoles": ["drum", "bass", "melody", "vocal", "accompaniment"],
+                        "minimumConfidence": 0.22,
+                        "minimumSustainDuration": 0.125,
+                        "npsCap": 8.5,
+                        "subdivisionDenominator": 8,
+                        "allowsTriplets": true
+                    }
+                ],
+                "sustainStabilityThreshold": 0.52,
+                "percussivenessRejectionThreshold": 0.76,
+                "layerImportanceWeights": {"drum": 1, "bass": 0.9, "melody": 1.1, "vocal": 1.2, "accompaniment": 0.72},
+                "dragCandidateClutterPenalty": 0.2,
+                "contourSmoothingWindow": 3,
+                "sectionBoundarySensitivity": 0.28
+            }
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try XCTUnwrap(AnalysisResult.decodePersisted(legacyJSON))
+        let policy = try XCTUnwrap(decoded.configuration.subdivisionPolicy.first { $0.difficulty == .hard })
+
+        XCTAssertEqual(policy.maxSimultaneous, 1)
+        XCTAssertEqual(policy.minimumSequentialGap, 0.09, accuracy: 1e-9)
+    }
+
+    /// A ~60s / 170bpm fixture with rich `musicalObjects` shaped like a fast song:
+    /// a 0-20s intro of dense tonal (melody/vocal/bass) content, and a 20-60s body at
+    /// comparable density that's drum-heavy with repeated melody segments, a handful of
+    /// hell-only-confidence drum events (survive hell's 0.16 gate, not hard/normal's),
+    /// a few explicit same-timestamp chord pairs, and a few sustain (drag) candidates.
+    private func makeFastSongAnalysis() -> AnalysisResult {
+        let duration: TimeInterval = 60
+        let tempo: Double = 170
+        let step: TimeInterval = 1.0 / 7.0
+        var objects: [MusicalObject] = []
+        var nextID = 1
+
+        func appendObject(
+            time: TimeInterval,
+            duration: TimeInterval,
+            role: MusicalRole,
+            confidence: Float,
+            importance: Float
+        ) {
+            objects.append(
+                MusicalObject(
+                    id: nextID,
+                    onsetTime: time,
+                    offsetTime: time + duration,
+                    sourceRole: role,
+                    meanEnergy: 0.8,
+                    sustainStability: role == .melody || role == .vocal ? 0.3 : 0.15,
+                    percussiveness: role == .drum ? 0.9 : 0.15,
+                    pitchContour: [],
+                    centroidContour: [ContourPoint(time: time, value: 440, confidence: 0.85)],
+                    voicingConfidence: role == .vocal ? 0.85 : 0.3,
+                    confidence: confidence,
+                    importanceScore: importance
+                )
+            )
+            nextID += 1
+        }
+
+        // Intro 0..<20s: dense tonal mix (melody/vocal/bass), ~7 events/s, high importance.
+        let introRoles: [MusicalRole] = [.melody, .vocal, .bass]
+        var time = 0.0
+        var introIndex = 0
+        while time < 20.0 {
+            appendObject(
+                time: time,
+                duration: 0.08,
+                role: introRoles[introIndex % introRoles.count],
+                confidence: 0.85,
+                importance: 0.85
+            )
+            introIndex += 1
+            time += step
+        }
+
+        // Body 20..<60s: drum-heavy + repeated melody segments at the same density/importance.
+        // One in five drum events uses a hell-only confidence (0.18: above hell's 0.16 gate,
+        // below hard/normal's 0.22/0.28) so hell keeps strictly more events than hard from the
+        // exact same fixture. Three explicit same-timestamp pairs (t = 35, 45, 55) exercise
+        // hell's maxSimultaneous = 2.
+        time = 20.0
+        var bodyIndex = 0
+        let chordBodyIndices: Set<Int> = [105, 175, 245]
+        while time < 60.0 {
+            switch bodyIndex % 5 {
+            case 0:
+                appendObject(time: time, duration: 0.08, role: .melody, confidence: 0.85, importance: 0.85)
+            case 2:
+                appendObject(time: time, duration: 0.08, role: .drum, confidence: 0.18, importance: 0.85)
+            default:
+                appendObject(time: time, duration: 0.08, role: .drum, confidence: 0.85, importance: 0.85)
+            }
+            if chordBodyIndices.contains(bodyIndex) {
+                appendObject(time: time, duration: 0.08, role: .vocal, confidence: 0.9, importance: 0.9)
+            }
+            bodyIndex += 1
+            time += step
+        }
+
+        // A few sustain candidates sprinkled through the body (drag material for the MIR path).
+        for base in stride(from: 24.0, to: 56.0, by: 8.0) {
+            let role: MusicalRole = Int(base) % 16 == 0 ? .melody : .vocal
+            objects.append(
+                MusicalObject(
+                    id: nextID,
+                    onsetTime: base,
+                    offsetTime: base + 1.2,
+                    sourceRole: role,
+                    meanEnergy: 0.75,
+                    sustainStability: 0.88,
+                    percussiveness: 0.08,
+                    pitchContour: stride(from: 0.0, through: 1.2, by: 0.3).map {
+                        ContourPoint(time: base + $0, value: 300 + Float($0 * 40), confidence: 0.85)
+                    },
+                    centroidContour: [],
+                    voicingConfidence: 0.85,
+                    confidence: 0.85,
+                    importanceScore: 0.85
+                )
+            )
+            nextID += 1
+        }
+
+        let onsets = objects.map {
+            Onset(time: $0.onsetTime, strength: $0.importanceScore, bass: 0.4, mid: 0.4, treble: 0.3, centroid: 440)
+        }
+
+        return AnalysisResult(
+            duration: duration,
+            tempo: tempo,
+            onsets: onsets,
+            meanBass: 0.4,
+            meanMid: 0.4,
+            meanTreble: 0.3,
+            meanRMS: 0.5,
+            musicalObjects: objects
+        )
     }
 
     private func makeObject(id: Int, time: TimeInterval, role: MusicalRole) -> MusicalObject {

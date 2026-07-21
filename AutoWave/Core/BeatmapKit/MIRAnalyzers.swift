@@ -240,7 +240,7 @@ struct DSPMelodyTracker: MelodyTracking {
         makeContourAnalysis(
             input: input,
             role: .melody,
-            frequencyRange: 180...3_000
+            roleAssignments: assignedTonalRoles(input: input)
         )
     }
 }
@@ -250,7 +250,7 @@ struct DSPBassTracker: BassTracking {
         makeContourAnalysis(
             input: input,
             role: .bass,
-            frequencyRange: 40...250
+            roleAssignments: assignedTonalRoles(input: input)
         )
     }
 }
@@ -260,7 +260,7 @@ struct DSPVocalSpanAnalyzer: VocalSpanAnalyzing {
         makeContourAnalysis(
             input: input,
             role: .vocal,
-            frequencyRange: 150...1_200
+            roleAssignments: assignedTonalRoles(input: input)
         ).objects
     }
 }
@@ -441,6 +441,12 @@ enum MIRAnalysisPipeline {
     }
 
     private static func accompanimentObjects(input: AnalyzerInput, startingID: Int) -> [MusicalObject] {
+        // Normalize against the track-wide accompaniment band (mid) energy, mirroring the
+        // drum tracker's value/maximum pattern, so importanceScore lands in 0-1 like the
+        // other roles instead of the raw ~1e-3 band magnitude.
+        let midValues = input.frames.map(\.mid)
+        guard let maximum = midValues.max(), maximum > 0 else { return [] }
+
         let qualifying = input.frames.enumerated().filter { _, frame in
             frame.mid > frame.bass * 1.1
                 && frame.mid > frame.treble * 1.1
@@ -448,21 +454,52 @@ enum MIRAnalysisPipeline {
                 && frame.flux < max(0.01, frame.rms * 1.5)
         }
         guard !qualifying.isEmpty else { return [] }
-        return qualifying.map { offset, frame in
-            let time = frameTime(offset, input: input)
+
+        // Merge contiguous qualifying frames into runs first (otherwise every single frame
+        // becomes its own object), then merge runs that are closer than the minimum spacing
+        // so the layer can't flood once the importance filter stops rejecting it outright.
+        let accompanimentMinimumGap: TimeInterval = 0.18
+        var runs: [[(offset: Int, element: SpectralFrame)]] = []
+        var runStart = 0
+        for index in 1...qualifying.count {
+            let isRunEnd = index == qualifying.count
+                || qualifying[index].offset != qualifying[index - 1].offset + 1
+            guard isRunEnd else { continue }
+            runs.append(Array(qualifying[runStart..<index]))
+            runStart = index
+        }
+
+        var mergedRuns: [[(offset: Int, element: SpectralFrame)]] = []
+        for run in runs {
+            if let lastFrame = mergedRuns.last?.last, let firstFrame = run.first {
+                let previousEnd = frameTime(lastFrame.offset + 1, input: input)
+                let currentStart = frameTime(firstFrame.offset, input: input)
+                if currentStart - previousEnd < accompanimentMinimumGap {
+                    mergedRuns[mergedRuns.count - 1].append(contentsOf: run)
+                    continue
+                }
+            }
+            mergedRuns.append(run)
+        }
+
+        return mergedRuns.map { run in
+            let startTime = frameTime(run[0].offset, input: input)
+            let endTime = frameTime(run.last!.offset + 1, input: input)
+            let meanMid = run.map { $0.element.mid }.reduce(0, +) / Float(run.count)
+            let meanCentroid = run.map { $0.element.centroid }.reduce(0, +) / Float(run.count)
             return MusicalObject(
-                id: startingID + offset,
-                onsetTime: time,
-                offsetTime: time + frameDuration(input: input),
+                id: startingID + run[0].offset,
+                onsetTime: startTime,
+                offsetTime: endTime,
                 sourceRole: .accompaniment,
-                meanEnergy: frame.mid,
+                meanEnergy: meanMid,
                 sustainStability: 0.6,
                 percussiveness: 0.15,
                 pitchContour: [],
-                centroidContour: [ContourPoint(time: time, value: frame.centroid, confidence: 0.6)],
+                centroidContour: [ContourPoint(time: startTime, value: meanCentroid, confidence: 0.6)],
                 voicingConfidence: 0,
                 confidence: 0.55,
-                importanceScore: frame.mid
+                importanceScore: min(1, meanMid / maximum)
             )
         }
     }
@@ -507,15 +544,62 @@ enum MIRAnalysisPipeline {
     }
 }
 
+/// The three tonal roles (bass/vocal/melody) have overlapping frequency ranges, so a single
+/// frame can qualify for more than one. Each case's `logCenter` (log of the geometric mean of
+/// its bounds) lets us pick the single nearest-in-log-frequency role per frame instead of
+/// emitting one event per matching role.
+private enum TonalRoleRange: CaseIterable {
+    case bass
+    case vocal
+    case melody
+
+    var musicalRole: MusicalRole {
+        switch self {
+        case .bass: return .bass
+        case .vocal: return .vocal
+        case .melody: return .melody
+        }
+    }
+
+    var frequencyRange: ClosedRange<Float> {
+        switch self {
+        case .bass: return 40...250
+        case .vocal: return 150...1_200
+        case .melody: return 180...3_000
+        }
+    }
+
+    var logCenter: Float {
+        let range = frequencyRange
+        return logf(sqrtf(range.lowerBound * range.upperBound))
+    }
+}
+
+/// Computes, per frame, at most one tonal role (bass/vocal/melody) or `nil` if the frame
+/// doesn't qualify for any of them. This is the single source of truth the melody/bass/vocal
+/// trackers all consult so a frame can never mint events for more than one role.
+private func assignedTonalRoles(input: AnalyzerInput) -> [MusicalRole?] {
+    let threshold = input.configuration.onsetConfidenceThreshold
+    return input.frames.map { frame -> MusicalRole? in
+        guard frame.pitchConfidence >= threshold else { return nil }
+        let candidates = TonalRoleRange.allCases.filter { $0.frequencyRange.contains(frame.dominantFrequency) }
+        guard !candidates.isEmpty else { return nil }
+        guard candidates.count > 1 else { return candidates[0].musicalRole }
+        guard frame.dominantFrequency > 0 else { return candidates[0].musicalRole }
+        let logFrequency = logf(frame.dominantFrequency)
+        let nearest = candidates.min {
+            abs($0.logCenter - logFrequency) < abs($1.logCenter - logFrequency)
+        }
+        return nearest?.musicalRole
+    }
+}
+
 private func makeContourAnalysis(
     input: AnalyzerInput,
     role: MusicalRole,
-    frequencyRange: ClosedRange<Float>
+    roleAssignments: [MusicalRole?]
 ) -> ContourAnalysis {
-    let selected = input.frames.enumerated().filter { _, frame in
-        frequencyRange.contains(frame.dominantFrequency)
-            && frame.pitchConfidence >= input.configuration.onsetConfidenceThreshold
-    }
+    let selected = input.frames.enumerated().filter { index, _ in roleAssignments[index] == role }
     guard !selected.isEmpty else { return ContourAnalysis(contour: [], objects: []) }
 
     let rawContour = selected.map { index, frame in
@@ -526,47 +610,106 @@ private func makeContourAnalysis(
         )
     }
     let contour = smoothContour(rawContour, window: input.configuration.contourSmoothingWindow)
+
+    // Re-segmentation cap: 2 beat intervals when tempo is known, otherwise a fixed 0.6s.
+    let maxSegmentDuration: TimeInterval = input.tempo > 0 ? 2 * (60.0 / input.tempo) : 0.6
+
     var objects: [MusicalObject] = []
-    var start = 0
+    var runStart = 0
     for index in 1...selected.count {
-        let isEnd = index == selected.count
+        let isRunEnd = index == selected.count
             || selected[index].offset != selected[index - 1].offset + 1
-        guard isEnd else { continue }
-        let slice = Array(selected[start..<index])
-        let startTime = frameTime(slice[0].offset, input: input)
-        let endTime = frameTime(slice.last!.offset + 1, input: input)
-        let points = Array(contour[start..<index])
-        let meanEnergy = slice.map { $0.element.rms }.reduce(0, +) / Float(slice.count)
-        let meanConfidence = slice.map { $0.element.pitchConfidence }.reduce(0, +) / Float(slice.count)
-        let pitchValues = points.map(\.value)
-        let meanPitch = pitchValues.reduce(0, +) / Float(pitchValues.count)
-        let variance = pitchValues.map { ($0 - meanPitch) * ($0 - meanPitch) }.reduce(0, +) / Float(pitchValues.count)
-        let stability = max(0, min(1, 1 - sqrtf(variance) / max(40, meanPitch)))
-        let centroids = smoothContour(
-            slice.map { offset, frame in
-                ContourPoint(time: frameTime(offset, input: input), value: frame.centroid, confidence: meanConfidence)
-            },
-            window: input.configuration.contourSmoothingWindow
-        )
-        objects.append(
-            MusicalObject(
-                id: roleID(role: role, start: slice[0].offset),
-                onsetTime: startTime,
-                offsetTime: endTime,
-                sourceRole: role,
-                meanEnergy: meanEnergy,
-                sustainStability: stability,
-                percussiveness: input.separationFrames.isEmpty ? 0.2 : meanPercussiveness(slice: slice, input: input),
-                pitchContour: points,
-                centroidContour: centroids,
-                voicingConfidence: meanConfidence,
-                confidence: meanConfidence,
-                importanceScore: min(1, meanEnergy * meanConfidence * 2)
-            )
-        )
-        start = index
+        guard isRunEnd else { continue }
+
+        let runSlice = Array(selected[runStart..<index])
+        let segments = splitContiguousRun(runSlice, input: input, maxSegmentDuration: maxSegmentDuration)
+
+        var segmentGlobalStart = runStart
+        for segment in segments {
+            let segmentGlobalEnd = segmentGlobalStart + segment.count
+            let points = Array(contour[segmentGlobalStart..<segmentGlobalEnd])
+            objects.append(makeMusicalObject(slice: segment, points: points, role: role, input: input))
+            segmentGlobalStart = segmentGlobalEnd
+        }
+        runStart = index
     }
     return ContourAnalysis(contour: contour, objects: objects)
+}
+
+/// Splits a contiguous run of same-role frames into phrase-sized segments at any of:
+/// a >6% relative jump in dominantFrequency between adjacent frames, an energy dip below
+/// 60% of the segment's running peak, or the segment reaching `maxSegmentDuration`.
+/// Without this, a long sustained tone collapses into a single MusicalObject and starves
+/// everything after the intro.
+private func splitContiguousRun(
+    _ slice: [(offset: Int, element: SpectralFrame)],
+    input: AnalyzerInput,
+    maxSegmentDuration: TimeInterval
+) -> [[(offset: Int, element: SpectralFrame)]] {
+    guard slice.count > 1 else { return [slice] }
+
+    var segments: [[(offset: Int, element: SpectralFrame)]] = []
+    var segmentStart = 0
+    var peakEnergy = slice[0].element.rms
+    var segmentStartTime = frameTime(slice[0].offset, input: input)
+
+    for index in 1..<slice.count {
+        let previousFrequency = slice[index - 1].element.dominantFrequency
+        let currentFrequency = slice[index].element.dominantFrequency
+        let relativeJump: Float = previousFrequency > 0
+            ? abs(currentFrequency - previousFrequency) / previousFrequency
+            : 0
+        let energyDip = slice[index].element.rms < peakEnergy * 0.6
+        let currentEndTime = frameTime(slice[index].offset + 1, input: input)
+        let durationExceeded = (currentEndTime - segmentStartTime) >= maxSegmentDuration
+
+        if relativeJump > 0.06 || energyDip || durationExceeded {
+            segments.append(Array(slice[segmentStart..<index]))
+            segmentStart = index
+            peakEnergy = slice[index].element.rms
+            segmentStartTime = frameTime(slice[index].offset, input: input)
+        } else {
+            peakEnergy = max(peakEnergy, slice[index].element.rms)
+        }
+    }
+    segments.append(Array(slice[segmentStart...]))
+    return segments
+}
+
+private func makeMusicalObject(
+    slice: [(offset: Int, element: SpectralFrame)],
+    points: [ContourPoint],
+    role: MusicalRole,
+    input: AnalyzerInput
+) -> MusicalObject {
+    let startTime = frameTime(slice[0].offset, input: input)
+    let endTime = frameTime(slice.last!.offset + 1, input: input)
+    let meanEnergy = slice.map { $0.element.rms }.reduce(0, +) / Float(slice.count)
+    let meanConfidence = slice.map { $0.element.pitchConfidence }.reduce(0, +) / Float(slice.count)
+    let pitchValues = points.map(\.value)
+    let meanPitch = pitchValues.reduce(0, +) / Float(pitchValues.count)
+    let variance = pitchValues.map { ($0 - meanPitch) * ($0 - meanPitch) }.reduce(0, +) / Float(pitchValues.count)
+    let stability = max(0, min(1, 1 - sqrtf(variance) / max(40, meanPitch)))
+    let centroids = smoothContour(
+        slice.map { offset, frame in
+            ContourPoint(time: frameTime(offset, input: input), value: frame.centroid, confidence: meanConfidence)
+        },
+        window: input.configuration.contourSmoothingWindow
+    )
+    return MusicalObject(
+        id: roleID(role: role, start: slice[0].offset),
+        onsetTime: startTime,
+        offsetTime: endTime,
+        sourceRole: role,
+        meanEnergy: meanEnergy,
+        sustainStability: stability,
+        percussiveness: input.separationFrames.isEmpty ? 0.2 : meanPercussiveness(slice: slice, input: input),
+        pitchContour: points,
+        centroidContour: centroids,
+        voicingConfidence: meanConfidence,
+        confidence: meanConfidence,
+        importanceScore: min(1, meanEnergy * meanConfidence * 2)
+    )
 }
 
 private func smoothContour(_ points: [ContourPoint], window: Int) -> [ContourPoint] {

@@ -236,6 +236,64 @@ struct DifficultyLayerPolicy: Codable, Sendable, Equatable {
     var npsCap: Double
     var subdivisionDenominator: Int
     var allowsTriplets: Bool
+    // How many events sharing the exact same timestamp may be retained on the MIR
+    // path before rate-culling; only hard/hell exceed 1 (true chords).
+    var maxSimultaneous: Int
+    // Minimum spacing enforced between distinct note timestamps for this difficulty.
+    var minimumSequentialGap: TimeInterval
+
+    // Kept explicit (rather than relying on the struct's free memberwise init) because
+    // a custom init(from:) below suppresses that synthesis.
+    init(
+        difficulty: Difficulty,
+        activeRoles: [MusicalRole],
+        minimumConfidence: Float,
+        minimumSustainDuration: TimeInterval,
+        npsCap: Double,
+        subdivisionDenominator: Int,
+        allowsTriplets: Bool,
+        maxSimultaneous: Int = 1,
+        minimumSequentialGap: TimeInterval = 0.09
+    ) {
+        self.difficulty = difficulty
+        self.activeRoles = activeRoles
+        self.minimumConfidence = minimumConfidence
+        self.minimumSustainDuration = minimumSustainDuration
+        self.npsCap = npsCap
+        self.subdivisionDenominator = subdivisionDenominator
+        self.allowsTriplets = allowsTriplets
+        self.maxSimultaneous = maxSimultaneous
+        self.minimumSequentialGap = minimumSequentialGap
+    }
+
+    // `maxSimultaneous`/`minimumSequentialGap` were added after this type started
+    // shipping inside AnalysisResult.configuration, which SwiftData persists
+    // (TrackEntity.analysisData). Older on-device JSON won't have these keys, so
+    // default them instead of failing the whole AnalysisResult decode.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        difficulty = try container.decode(Difficulty.self, forKey: .difficulty)
+        activeRoles = try container.decode([MusicalRole].self, forKey: .activeRoles)
+        minimumConfidence = try container.decode(Float.self, forKey: .minimumConfidence)
+        minimumSustainDuration = try container.decode(TimeInterval.self, forKey: .minimumSustainDuration)
+        npsCap = try container.decode(Double.self, forKey: .npsCap)
+        subdivisionDenominator = try container.decode(Int.self, forKey: .subdivisionDenominator)
+        allowsTriplets = try container.decode(Bool.self, forKey: .allowsTriplets)
+        maxSimultaneous = try container.decodeIfPresent(Int.self, forKey: .maxSimultaneous) ?? 1
+        minimumSequentialGap = try container.decodeIfPresent(TimeInterval.self, forKey: .minimumSequentialGap) ?? 0.09
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case difficulty
+        case activeRoles
+        case minimumConfidence
+        case minimumSustainDuration
+        case npsCap
+        case subdivisionDenominator
+        case allowsTriplets
+        case maxSimultaneous
+        case minimumSequentialGap
+    }
 }
 
 struct AnalyzerConfiguration: Codable, Sendable, Equatable {
@@ -254,11 +312,11 @@ struct AnalyzerConfiguration: Codable, Sendable, Equatable {
         onsetConfidenceThreshold: 0.22,
         beatSnapTolerance: 0.06,
         subdivisionPolicy: [
-            DifficultyLayerPolicy(difficulty: .heaven, activeRoles: [.drum, .melody], minimumConfidence: 0.45, minimumSustainDuration: 0.25, npsCap: 2.4, subdivisionDenominator: 2, allowsTriplets: false),
-            DifficultyLayerPolicy(difficulty: .easy, activeRoles: [.drum, .bass, .melody], minimumConfidence: 0.35, minimumSustainDuration: 0.20, npsCap: 4, subdivisionDenominator: 4, allowsTriplets: false),
-            DifficultyLayerPolicy(difficulty: .normal, activeRoles: [.drum, .bass, .melody, .vocal], minimumConfidence: 0.28, minimumSustainDuration: 0.125, npsCap: 6, subdivisionDenominator: 4, allowsTriplets: true),
-            DifficultyLayerPolicy(difficulty: .hard, activeRoles: [.drum, .bass, .melody, .vocal, .accompaniment], minimumConfidence: 0.22, minimumSustainDuration: 0.125, npsCap: 8.5, subdivisionDenominator: 8, allowsTriplets: true),
-            DifficultyLayerPolicy(difficulty: .hell, activeRoles: MusicalRole.allCases, minimumConfidence: 0.16, minimumSustainDuration: 0.125, npsCap: 12, subdivisionDenominator: 8, allowsTriplets: true)
+            DifficultyLayerPolicy(difficulty: .heaven, activeRoles: [.drum, .melody], minimumConfidence: 0.45, minimumSustainDuration: 0.25, npsCap: 2.4, subdivisionDenominator: 2, allowsTriplets: false, maxSimultaneous: 1, minimumSequentialGap: 0.16),
+            DifficultyLayerPolicy(difficulty: .easy, activeRoles: [.drum, .bass, .melody], minimumConfidence: 0.35, minimumSustainDuration: 0.20, npsCap: 4, subdivisionDenominator: 4, allowsTriplets: false, maxSimultaneous: 1, minimumSequentialGap: 0.12),
+            DifficultyLayerPolicy(difficulty: .normal, activeRoles: [.drum, .bass, .melody, .vocal], minimumConfidence: 0.28, minimumSustainDuration: 0.125, npsCap: 6, subdivisionDenominator: 4, allowsTriplets: true, maxSimultaneous: 1, minimumSequentialGap: 0.09),
+            DifficultyLayerPolicy(difficulty: .hard, activeRoles: [.drum, .bass, .melody, .vocal, .accompaniment], minimumConfidence: 0.22, minimumSustainDuration: 0.125, npsCap: 8.5, subdivisionDenominator: 8, allowsTriplets: true, maxSimultaneous: 2, minimumSequentialGap: 0.075),
+            DifficultyLayerPolicy(difficulty: .hell, activeRoles: MusicalRole.allCases, minimumConfidence: 0.16, minimumSustainDuration: 0.125, npsCap: 12, subdivisionDenominator: 8, allowsTriplets: true, maxSimultaneous: 2, minimumSequentialGap: 0.06)
         ],
         sustainStabilityThreshold: 0.52,
         percussivenessRejectionThreshold: 0.76,

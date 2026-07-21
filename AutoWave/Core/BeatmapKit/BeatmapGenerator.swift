@@ -3,8 +3,7 @@ import Foundation
 enum BeatmapGenerator {
     static let version = 9
     static let minimumPlayableNoteTime: TimeInterval = 2
-    private static let minimumSequentialGap: TimeInterval = 0.09
-    private static let dragSpanPadding: TimeInterval = 0.15
+    private static let dragSpanPadding: TimeInterval = 0.08
     private static let minimumLaneStepInterval: TimeInterval = 0.35
 
     // Tunables ported from tools/notegen-playground.html (playground parity).
@@ -37,7 +36,8 @@ enum BeatmapGenerator {
             beat: beat,
             configuration: analysis.configuration
         )
-        let npsCap = Int(ceil(analysis.configuration.policy(for: difficulty).npsCap))
+        let policy = analysis.configuration.policy(for: difficulty)
+        let npsCap = Int(ceil(policy.npsCap))
         var rng = SplitMix64(seed: seed)
         let indexedOnsets = analysis.onsets.enumerated().map {
             IndexedOnset(index: $0.offset, onset: $0.element)
@@ -61,8 +61,10 @@ enum BeatmapGenerator {
                         phase: beatGridPhase(from: analysis.beatGrid, subdivision: subdivision),
                         snapTolerance: analysis.configuration.beatSnapTolerance
                     ),
-                    cap: npsCap
-                )
+                    cap: npsCap,
+                    maxSimultaneous: policy.maxSimultaneous
+                ),
+                gap: policy.minimumSequentialGap
             )
         } else {
             let detectedOnsets = selectOnsets(indexedOnsets, profile: profile, analysis: analysis)
@@ -83,14 +85,15 @@ enum BeatmapGenerator {
                         snapTolerance: analysis.configuration.beatSnapTolerance,
                         rng: &rng
                     ),
-                    cap: npsCap
-                )
+                    cap: npsCap,
+                    maxSimultaneous: policy.maxSimultaneous
+                ),
+                gap: policy.minimumSequentialGap
             )
         }
         var sustainByObjectID: [Int: SustainCandidate] = [:]
         let dragSources: Set<Int>
         if usesMIR {
-            let policy = analysis.configuration.policy(for: difficulty)
             var eligibleByObjectID: [Int: SustainCandidate] = [:]
             for candidate in analysis.sustainCandidates where
                 candidate.sourceRole != .drum
@@ -122,7 +125,8 @@ enum BeatmapGenerator {
                 duration: analysis.duration,
                 phase: beatGridPhase(from: analysis.beatGrid, subdivision: subdivision),
                 snapTolerance: analysis.configuration.beatSnapTolerance,
-                npsCap: npsCap
+                npsCap: npsCap,
+                maxSimultaneous: policy.maxSimultaneous
             )
         } else {
             let survivingSources = selected.filter { item in
@@ -521,7 +525,8 @@ enum BeatmapGenerator {
         duration: TimeInterval,
         phase: TimeInterval,
         snapTolerance: TimeInterval,
-        npsCap: Int
+        npsCap: Int,
+        maxSimultaneous: Int
     ) -> [PatternEvent] {
         var result = events
         for candidate in candidates {
@@ -566,6 +571,7 @@ enum BeatmapGenerator {
         return cullByRate(
             result,
             cap: npsCap,
+            maxSimultaneous: maxSimultaneous,
             preferredSourceObjectIDs: preferredSourceObjectIDs
         )
     }
@@ -659,7 +665,8 @@ enum BeatmapGenerator {
     }
 
     private static func enforceMinimumSequentialGap(
-        _ events: [PatternEvent]
+        _ events: [PatternEvent],
+        gap: TimeInterval
     ) -> [PatternEvent] {
         let sorted = events.sorted(by: patternEventSort)
         var result: [PatternEvent] = []
@@ -673,8 +680,11 @@ enum BeatmapGenerator {
                 index += 1
             }
 
+            // Events within this group share the same timestamp (e.g. a chord pair)
+            // and are exempt from the gap check between each other; only the gap
+            // between distinct timestamps is enforced below.
             let group = Array(sorted[start..<index])
-            if let lastTime, group[0].time - lastTime < minimumSequentialGap - 1e-9 {
+            if let lastTime, group[0].time - lastTime < gap - 1e-9 {
                 continue
             }
             result.append(contentsOf: group)
@@ -687,6 +697,7 @@ enum BeatmapGenerator {
     private static func cullByRate(
         _ events: [PatternEvent],
         cap: Int,
+        maxSimultaneous: Int = 1,
         preferredSourceObjectIDs: Set<Int> = []
     ) -> [PatternEvent] {
         guard cap > 0 else { return [] }
@@ -703,50 +714,46 @@ enum BeatmapGenerator {
                 index += 1
             }
 
+            // Rank the timestamp group by preferred source first, then by highest
+            // importance/strength (chords get a small bonus via `priority`), so the
+            // strongest simultaneous events are the ones kept.
             let group = Array(sorted[start..<index]).sorted {
                 let lhsPreferred = $0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
                 let rhsPreferred = $1.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
                 if lhsPreferred != rhsPreferred { return lhsPreferred }
-                return patternEventSort($0, $1)
+                if $0.priority != $1.priority { return $0.priority > $1.priority }
+                return $0.identity < $1.identity
             }
             let windowStart = group[0].time - 1
             active.removeAll { $0.time <= windowStart }
-            let chordPair = group.filter { !$0.isChord }.prefix(1)
-                + group.filter(\.isChord).prefix(2)
-            let toKeep = chordPair.count > 1 ? Array(chordPair) : Array(group.prefix(1))
+
+            // Keep up to `maxSimultaneous` events per timestamp (difficulties whose
+            // policy allows only 1 simply keep the single strongest event); the
+            // extra kept events still count toward the nps cap below.
+            let keepCount = max(1, min(maxSimultaneous, group.count))
+            let toKeep = Array(group.prefix(keepCount))
             var available = cap - active.count
 
-            if available < toKeep.count,
-               toKeep.contains(where: {
-                   $0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
-               }) {
-                let removable = active
-                    .filter { !($0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false) }
-                    .sorted {
-                        if $0.time == $1.time { return $0.identity < $1.identity }
-                        return $0.time < $1.time
-                    }
-                guard let removed = removable.first else { continue }
-                active.removeAll { $0.identity == removed.identity }
-                result.removeAll { $0.identity == removed.identity }
-                available += 1
-            }
-
-            if toKeep.count > available, chordPair.count > 1 {
-                let removable = active
-                    .filter { !$0.isChord }
-                    .sorted {
-                        if $0.time == $1.time { return $0.identity < $1.identity }
-                        return $0.time < $1.time
-                    }
-                    + active.filter(\.isChord)
-                let removeCount = toKeep.count - available
-                guard removeCount <= removable.count else { continue }
-                for removed in removable.prefix(removeCount) {
-                    active.removeAll { $0.identity == removed.identity }
-                    result.removeAll { $0.identity == removed.identity }
+            if toKeep.count > available {
+                let needed = toKeep.count - available
+                let hasPreferred = toKeep.contains {
+                    $0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false
                 }
-                available += removeCount
+                if hasPreferred || keepCount > 1 {
+                    let removable = active
+                        .filter { !($0.sourceObjectID.map(preferredSourceObjectIDs.contains) ?? false) }
+                        .sorted {
+                            if $0.time == $1.time { return $0.identity < $1.identity }
+                            return $0.time < $1.time
+                        }
+                    if removable.count >= needed {
+                        for removed in removable.prefix(needed) {
+                            active.removeAll { $0.identity == removed.identity }
+                            result.removeAll { $0.identity == removed.identity }
+                        }
+                        available += needed
+                    }
+                }
             }
 
             guard toKeep.count <= available else { continue }
@@ -1097,12 +1104,20 @@ enum BeatmapGenerator {
             return []
         }
 
-        var currentLane = min(laneCount - 1, max(0, startLane))
+        let clampedStart = min(laneCount - 1, max(0, startLane))
+        // Cap the drag's lane spread to at most 3 adjacent lanes centered on the
+        // start lane so a single contour drag can't sweep the whole lane range and
+        // block every other lane for its entire duration.
+        let laneWindowMin = max(0, clampedStart - 1)
+        let laneWindowMax = min(laneCount - 1, clampedStart + 1)
+
+        var currentLane = clampedStart
         var nextOffset = minimumLaneStepInterval
         var path: [LaneKeyframe] = []
         for point in contour.dropFirst() {
             let normalized = Double((point.value - minimum) / (maximum - minimum))
-            let targetLane = min(laneCount - 1, max(0, Int((normalized * Double(laneCount - 1)).rounded())))
+            let rawTargetLane = min(laneCount - 1, max(0, Int((normalized * Double(laneCount - 1)).rounded())))
+            let targetLane = min(laneWindowMax, max(laneWindowMin, rawTargetLane))
             while currentLane != targetLane,
                   nextOffset <= duration + 1e-9 {
                 let direction = targetLane > currentLane ? 1 : -1

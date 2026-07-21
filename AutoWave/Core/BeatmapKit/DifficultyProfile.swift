@@ -55,7 +55,7 @@ struct DifficultyProfile: Sendable {
                 maxNotesPerSecond: 12,
                 strengthPercentile: 5,
                 maxSimultaneous: 2,
-                dragRatio: 0.60,
+                dragRatio: 0.40,
                 movingDragRatio: 0.9,
                 scrollSpeed: 545
             )
