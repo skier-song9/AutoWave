@@ -282,7 +282,6 @@ struct ReadyModal: View {
     let onStart: (Difficulty) -> Void
 
     @State private var selectedDifficulty: Difficulty
-    @State private var laneCount = 4
     @State private var speedStateRevision = 0
     @State private var isStarting = false
     @State private var errorMessage: String?
@@ -299,6 +298,12 @@ struct ReadyModal: View {
         self.speedState = speedState
         self.onStart = onStart
         _selectedDifficulty = State(initialValue: difficulty)
+    }
+
+    /// Lane count is fixed per difficulty (`DifficultyProfile.laneCount`); the user can
+    /// no longer override it, so this always reflects the currently selected difficulty.
+    private var fixedLaneCount: Int {
+        DifficultyProfile.profile(for: selectedDifficulty).laneCount
     }
 
     var body: some View {
@@ -336,10 +341,6 @@ struct ReadyModal: View {
         }
         .task {
             let profile = ProfileEntity.current(in: modelContext)
-            laneCount = min(max(
-                profile.preferredLaneCount ?? DifficultyProfile.profile(for: initialDifficulty).laneCount,
-                4
-            ), 7)
             let speedMultiplier = NoteSpeedMultiplierState.allowedValues.first {
                 abs(Double($0) - profile.noteSpeedMultiplier) < 0.000_001
             } ?? 1.0
@@ -392,28 +393,11 @@ struct ReadyModal: View {
     }
 
     private var settingsColumn: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             settingsPanel(title: "난이도") {
                 HStack(spacing: 5) {
                     ForEach(Difficulty.allCases, id: \.rawValue) { difficulty in
                         difficultyCard(difficulty)
-                    }
-                }
-            }
-
-            settingsPanel {
-                HStack(alignment: .center, spacing: 8) {
-                    settingCopy(
-                        title: "LANE 개수",
-                        caption: "노트가 떨어지는 라인의 개수를 설정합니다."
-                    )
-                    Spacer(minLength: 8)
-                    HStack(spacing: 5) {
-                        ForEach(4...7, id: \.self) { value in
-                            optionChip("\(value)", selected: laneCount == value, size: 32) {
-                                laneCount = value
-                            }
-                        }
                     }
                 }
             }
@@ -505,8 +489,11 @@ struct ReadyModal: View {
                 Text(difficulty.levelLabel)
                     .font(.system(size: 8, design: .monospaced))
                     .foregroundStyle(AppTheme.mutedBright)
+                Text("\(DifficultyProfile.profile(for: difficulty).laneCount) 레인")
+                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(AppTheme.muted)
             }
-            .frame(maxWidth: .infinity, minHeight: 54)
+            .frame(maxWidth: .infinity, minHeight: 64)
         }
         .buttonStyle(.plain)
         .background(
@@ -592,7 +579,6 @@ struct ReadyModal: View {
         isStarting = true
 
         let profile = ProfileEntity.current(in: modelContext)
-        profile.preferredLaneCount = laneCount
         profile.noteSpeedMultiplier = Double(speedState.value)
 
         do {
@@ -610,7 +596,7 @@ struct ReadyModal: View {
         }
         let shouldRegenerate = AnalysisViewModel.shouldRegenerate(
             storedLaneCount: storedBeatmap?.laneCount,
-            chosenLaneCount: laneCount,
+            chosenLaneCount: fixedLaneCount,
             storedGeneratorVersion: storedBeatmap?.generatorVersion
         )
 
@@ -625,7 +611,7 @@ struct ReadyModal: View {
             await viewModel.regenerate(
                 track: track,
                 difficulty: selectedDifficulty,
-                laneCountOverride: laneCount,
+                laneCountOverride: fixedLaneCount,
                 context: modelContext
             )
             guard case .done = viewModel.state else {

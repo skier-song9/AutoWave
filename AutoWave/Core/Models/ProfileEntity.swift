@@ -8,6 +8,9 @@ final class ProfileEntity {
     var avatarTint: String
     var createdAt: Date
     var noteSpeedMultiplier: Double = 1.0
+    /// Retired: lane count is now fixed per difficulty (`DifficultyProfile.laneCount`)
+    /// and is no longer user-selectable. Kept as a stored property to avoid SwiftData
+    /// schema churn; nothing reads or writes this anymore.
     var preferredLaneCount: Int? = nil
 
     init(

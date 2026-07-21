@@ -158,7 +158,27 @@ enum BeatmapGenerator {
         var laneHistory: [Int] = []
         for group in groups {
             var lanes: [Int] = []
+            // Groups with more than one event are chord pairs (maxSimultaneous
+            // caps every difficulty at 2): the first note keeps its natural,
+            // centroid-driven lane, and every subsequent note in the group must
+            // land in the opposite left/right hand region so a chord is always
+            // playable two-handed. See `chordRegions`/`oppositeHandRegion`.
+            let isChordGroup = group.count > 1
             for event in group {
+                let forcedRegion: ClosedRange<Int>?
+                if isChordGroup, let firstLane = lanes.first {
+                    guard let region = oppositeHandRegion(of: firstLane, laneCount: laneCount) else {
+                        // No lane exists in the opposite hand region for this lane
+                        // count (never happens for the supported 4-7 lanes, but
+                        // guarded so we drop the chord partner rather than place
+                        // it in the same region as the rest of the chord).
+                        continue
+                    }
+                    forcedRegion = region
+                } else {
+                    forcedRegion = nil
+                }
+
                 let lane = assignLane(
                     for: event.source.onset,
                     role: event.sourceRole,
@@ -168,6 +188,7 @@ enum BeatmapGenerator {
                     occupiedLanes: lanes,
                     recentLanes: laneHistory,
                     tuning: tuning,
+                    forcedRegion: forcedRegion,
                     rng: &rng
                 )
                 lanes.append(lane)
@@ -932,17 +953,25 @@ enum BeatmapGenerator {
         occupiedLanes: [Int],
         recentLanes: [Int],
         tuning: GenerationTuning,
+        forcedRegion: ClosedRange<Int>? = nil,
         rng: inout SplitMix64
     ) -> Int {
         let centroidPercentile = percentileRank(of: onset.centroid, in: centroidValues)
         let region: ClosedRange<Int>
-        switch onset.band {
-        case .low:
-            region = 0...max(0, (laneCount - 1) / 2)
-        case .mid:
-            region = max(0, laneCount / 3)...min(laneCount - 1, (laneCount * 2) / 3)
-        case .high:
-            region = min(laneCount - 1, (laneCount * 2) / 3)...(laneCount - 1)
+        if let forcedRegion {
+            // A chord partner note: pin the lane search to the caller-supplied
+            // left/right hand region instead of the usual low/mid/high band
+            // region, so simultaneous notes are always split across hands.
+            region = forcedRegion
+        } else {
+            switch onset.band {
+            case .low:
+                region = 0...max(0, (laneCount - 1) / 2)
+            case .mid:
+                region = max(0, laneCount / 3)...min(laneCount - 1, (laneCount * 2) / 3)
+            case .high:
+                region = min(laneCount - 1, (laneCount * 2) / 3)...(laneCount - 1)
+            }
         }
         let regionWidth = region.upperBound - region.lowerBound + 1
         let bias = role.flatMap { tuning.laneMappingWeights[$0] } ?? 0
@@ -977,6 +1006,31 @@ enum BeatmapGenerator {
             return lane
         }
         return preferredLane
+    }
+
+    /// The lane index that splits a lane range into left-hand and right-hand
+    /// chord regions: lanes `0..<chordRegions(laneCount:)` are the left-hand
+    /// region, lanes `chordRegions(laneCount:)..<laneCount` are the right-hand
+    /// region. Using `ceil(laneCount / 2)` keeps both regions non-empty (and as
+    /// evenly sized as possible) for every supported lane count (4-7).
+    private static func chordRegions(laneCount: Int) -> Int {
+        Int((Double(laneCount) / 2).rounded(.up))
+    }
+
+    /// The hand region opposite the one containing `lane`, for placing a
+    /// chord's other note(s) on the other hand. Returns `nil` only if that
+    /// opposite region would be empty — not possible for the supported 4-7
+    /// lane range, but guarded so callers can drop the note instead of placing
+    /// it in the same region as the rest of the chord.
+    private static func oppositeHandRegion(of lane: Int, laneCount: Int) -> ClosedRange<Int>? {
+        let split = chordRegions(laneCount: laneCount)
+        if lane < split {
+            guard split <= laneCount - 1 else { return nil }
+            return split...(laneCount - 1)
+        } else {
+            guard split >= 1 else { return nil }
+            return 0...(split - 1)
+        }
     }
 
     private static func repeatsPattern(candidate: Int, history: [Int]) -> Bool {

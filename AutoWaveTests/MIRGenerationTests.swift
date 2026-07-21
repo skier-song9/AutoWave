@@ -505,6 +505,51 @@ final class MIRGenerationTests: XCTestCase {
             hasSimultaneousDifferentLaneNotes(normal.notes),
             "Normal's maxSimultaneous is 1; it should never produce simultaneous notes on different lanes"
         )
+
+        // Every simultaneous pair must also be playable two-handed: split
+        // across the left/right lane regions (split = ceil(laneCount/2) = 4
+        // for hell's 7 lanes), never two notes on the same hand's side.
+        let split = 4
+        let hellChords = Dictionary(grouping: hell.notes, by: \.time).values.filter { $0.count > 1 }
+        XCTAssertFalse(hellChords.isEmpty, "Expected at least one hell chord group to verify the hand-region split on")
+        for group in hellChords {
+            let regions = Set(group.map { Int($0.lane) < split ? 0 : 1 })
+            XCTAssertEqual(
+                regions.count,
+                2,
+                "Hell chord at \(group[0].time) is not split across hand regions: lanes \(group.map(\.lane))"
+            )
+        }
+    }
+
+    func testSimultaneousNotesSpanLeftAndRightHandRegions() {
+        let analysis = makeFastSongAnalysis()
+        // split = ceil(laneCount / 2): 6 lanes -> 3, 7 lanes -> 4.
+        let expectations: [(Difficulty, Int)] = [(.hard, 3), (.hell, 4)]
+
+        for (difficulty, split) in expectations {
+            var sawChord = false
+            for seed in 0..<8 {
+                let beatmap = BeatmapGenerator.generate(
+                    from: analysis,
+                    difficulty: difficulty,
+                    seed: UInt64(seed)
+                )
+                let groups = Dictionary(grouping: beatmap.notes, by: \.time).values.filter { $0.count > 1 }
+
+                for group in groups {
+                    sawChord = true
+                    let regions = Set(group.map { Int($0.lane) < split ? 0 : 1 })
+                    XCTAssertEqual(
+                        regions.count,
+                        2,
+                        "\(difficulty) seed \(seed): chord at \(group[0].time) not split across hand " +
+                            "regions: lanes \(group.map(\.lane))"
+                    )
+                }
+            }
+            XCTAssertTrue(sawChord, "Expected at least one simultaneous-note chord for \(difficulty) across seeds 0..<8")
+        }
     }
 
     func testNpsCapHoldsOnMIRPath() {
