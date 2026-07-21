@@ -45,7 +45,7 @@ final class GameScene: SKScene, @unchecked Sendable {
     private final class TapNoteNode: SKNode {
         let note: Note
 
-        static let noteHeight: CGFloat = 22
+        static let noteHeight: CGFloat = 28
         static let texturePadding: CGFloat = 8
 
         private let body = SKSpriteNode()
@@ -100,7 +100,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 context.saveGState()
                 context.setShadow(
                     offset: .zero,
-                    blur: 8,
+                    blur: 9,
                     color: fillColor.cgColor
                 )
                 context.setFillColor(fillColor.cgColor)
@@ -111,11 +111,11 @@ final class GameScene: SKScene, @unchecked Sendable {
                 let bodyGradient = CGGradient(
                     colorsSpace: CGColorSpaceCreateDeviceRGB(),
                     colors: [
-                        shade(colors, by: 0.55).cgColor,
+                        shade(colors, by: 0.62).cgColor,
                         fillColor.cgColor,
-                        shade(colors, by: -0.42).cgColor
+                        shade(colors, by: -0.46).cgColor
                     ] as CFArray,
-                    locations: [0, 0.5, 1]
+                    locations: [0, 0.45, 1]
                 )!
                 context.saveGState()
                 context.addPath(pillPath.cgPath)
@@ -128,7 +128,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 )
                 context.restoreGState()
 
-                let highlightHeight = noteSize.height * 0.30
+                let highlightHeight = noteSize.height * 0.28
                 let highlightInset = noteSize.width * 0.13
                 let highlightRect = CGRect(
                     x: pillRect.minX + highlightInset,
@@ -143,7 +143,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 let highlightGradient = CGGradient(
                     colorsSpace: CGColorSpaceCreateDeviceRGB(),
                     colors: [
-                        UIColor.white.withAlphaComponent(0.55).cgColor,
+                        UIColor.white.withAlphaComponent(0.72).cgColor,
                         UIColor.white.withAlphaComponent(0).cgColor
                     ] as CFArray,
                     locations: [0, 1]
@@ -159,7 +159,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 )
                 context.restoreGState()
 
-                let dashHeight = max(noteSize.height * 0.14, 3)
+                let dashHeight = max(noteSize.height * 0.11, 3)
                 let dashRect = CGRect(
                     x: pillRect.midX - noteSize.width * 0.25,
                     y: pillRect.midY - dashHeight / 2,
@@ -181,7 +181,7 @@ final class GameScene: SKScene, @unchecked Sendable {
                 context.fillPath()
                 context.restoreGState()
 
-                context.setStrokeColor(UIColor.white.withAlphaComponent(0.75).cgColor)
+                context.setStrokeColor(UIColor.white.withAlphaComponent(0.86).cgColor)
                 context.setLineWidth(1.5)
                 context.addPath(pillPath.cgPath)
                 context.strokePath()
@@ -705,11 +705,11 @@ final class GameScene: SKScene, @unchecked Sendable {
         private let beamMaskNode = SKShapeNode()
         private let beamContainer = SKNode()
         private let beamStrips: [SKShapeNode]
-        private let burstNode = SKNode()
-        private let burstOuter = SKShapeNode(circleOfRadius: 1)
-        private let burstMid = SKShapeNode(circleOfRadius: 0.62)
-        private let burstCore = SKShapeNode(circleOfRadius: 0.16)
-        private let ring = SKShapeNode(circleOfRadius: 1)
+        private let rippleCropNode = SKCropNode()
+        private let rippleMaskNode = SKShapeNode()
+        private let rippleFlash = SKShapeNode()
+        private let rippleRing = SKShapeNode()
+        private let rippleCore = SKShapeNode()
         private var color: SKColor
         private var laneWidth: CGFloat = 0
 
@@ -736,20 +736,32 @@ final class GameScene: SKScene, @unchecked Sendable {
                 beamContainer.addChild(strip)
             }
 
-            burstOuter.strokeColor = .clear
-            burstMid.strokeColor = .clear
-            burstCore.strokeColor = .clear
-            for burst in [burstOuter, burstMid, burstCore] {
-                burst.blendMode = .add
-                burstNode.addChild(burst)
-            }
-            contentNode.addChild(burstNode)
-
-            ring.fillColor = .clear
-            ring.lineWidth = 2.5
-            ring.blendMode = .add
-            contentNode.addChild(ring)
             addChild(contentCropNode)
+
+            // The circular hit ripple lives outside the lane-shaped crop so it can
+            // expand up to the midpoint of the adjacent lane; its own circular
+            // mask (radius = laneWidth) guarantees it never reaches beyond that.
+            rippleMaskNode.fillColor = .white
+            rippleMaskNode.strokeColor = .clear
+            rippleCropNode.maskNode = rippleMaskNode
+
+            rippleFlash.strokeColor = .clear
+            rippleFlash.blendMode = .add
+            rippleFlash.alpha = 0
+            rippleCropNode.addChild(rippleFlash)
+
+            rippleRing.fillColor = .clear
+            rippleRing.lineWidth = 3
+            rippleRing.glowWidth = 8
+            rippleRing.blendMode = .add
+            rippleRing.alpha = 0
+            rippleCropNode.addChild(rippleRing)
+
+            rippleCore.strokeColor = .clear
+            rippleCore.blendMode = .add
+            rippleCore.alpha = 0
+            rippleCropNode.addChild(rippleCore)
+            addChild(rippleCropNode)
 
             zPosition = 4
             isHidden = true
@@ -793,6 +805,21 @@ final class GameScene: SKScene, @unchecked Sendable {
                     transform: nil
                 )
             }
+
+            // Max ripple radius: own half-lane (0.5) + half of the adjacent
+            // lane (0.5) = laneWidth × 1.0.
+            let maxRadius = laneWidth
+            let circleRect = CGRect(
+                x: -maxRadius,
+                y: -maxRadius,
+                width: maxRadius * 2,
+                height: maxRadius * 2
+            )
+            let circlePath = CGPath(ellipseIn: circleRect, transform: nil)
+            rippleMaskNode.path = circlePath
+            rippleFlash.path = circlePath
+            rippleRing.path = circlePath
+            rippleCore.path = circlePath
             updateColors(color)
         }
 
@@ -802,22 +829,42 @@ final class GameScene: SKScene, @unchecked Sendable {
             position = point
             isHidden = false
             contentNode.removeAllActions()
-            burstNode.removeAllActions()
-            ring.removeAllActions()
+            rippleFlash.removeAllActions()
+            rippleRing.removeAllActions()
+            rippleCore.removeAllActions()
             contentNode.alpha = 1
-            burstNode.setScale(laneWidth * 0.15)
-            ring.setScale(laneWidth * 0.15)
 
-            let duration: TimeInterval = 0.25
-            let fade = SKAction.fadeAlpha(to: 0, duration: duration)
-            fade.timingMode = .linear
-            let burstExpansion = SKAction.scale(to: laneWidth * 0.44, duration: duration)
-            burstExpansion.timingMode = .linear
-            let ringExpansion = SKAction.scale(to: laneWidth * 0.42, duration: duration)
-            ringExpansion.timingMode = .linear
-            contentNode.run(fade)
-            burstNode.run(burstExpansion)
-            ring.run(ringExpansion)
+            let beamFade = SKAction.fadeAlpha(to: 0, duration: 0.25)
+            beamFade.timingMode = .linear
+            contentNode.run(beamFade)
+
+            // Bright expanding ring: scale 1.0 == max radius (laneWidth).
+            let ringDuration: TimeInterval = 0.34
+            rippleRing.alpha = 1
+            rippleRing.setScale(0.18)
+            let ringExpansion = SKAction.scale(to: 1.0, duration: ringDuration)
+            ringExpansion.timingMode = .easeOut
+            let ringFade = SKAction.sequence([
+                SKAction.wait(forDuration: ringDuration * 0.35),
+                SKAction.fadeAlpha(to: 0, duration: ringDuration * 0.65)
+            ])
+            rippleRing.run(SKAction.group([ringExpansion, ringFade]))
+
+            // Soft fill flash.
+            rippleFlash.alpha = 0.85
+            rippleFlash.setScale(0.12)
+            let flashExpansion = SKAction.scale(to: 0.62, duration: 0.30)
+            flashExpansion.timingMode = .easeOut
+            let flashFade = SKAction.fadeAlpha(to: 0, duration: 0.30)
+            rippleFlash.run(SKAction.group([flashExpansion, flashFade]))
+
+            // Hot white core pop.
+            rippleCore.alpha = 0.95
+            rippleCore.setScale(0.05)
+            let coreExpansion = SKAction.scale(to: 0.22, duration: 0.20)
+            coreExpansion.timingMode = .easeOut
+            let coreFade = SKAction.fadeAlpha(to: 0, duration: 0.20)
+            rippleCore.run(SKAction.group([coreExpansion, coreFade]))
         }
 
         private func updateColors(_ color: SKColor) {
@@ -832,10 +879,9 @@ final class GameScene: SKScene, @unchecked Sendable {
                 }
             }
 
-            burstOuter.fillColor = color.withAlphaComponent(0.08)
-            burstMid.fillColor = color.withAlphaComponent(0.38)
-            burstCore.fillColor = SKColor.white.withAlphaComponent(0.94)
-            ring.strokeColor = color
+            rippleFlash.fillColor = color.withAlphaComponent(0.5)
+            rippleRing.strokeColor = color
+            rippleCore.fillColor = SKColor.white.withAlphaComponent(0.95)
         }
     }
 
@@ -1016,13 +1062,14 @@ final class GameScene: SKScene, @unchecked Sendable {
     private let citySilhouetteNode = SKShapeNode()
     private let scanlineOverlayNode = SKSpriteNode()
     private let hitLineNode = SKShapeNode()
-    private let healthRingNode = RingGaugeNode(maxSweepFraction: 0.85)
+    private let healthRingNode = RingGaugeNode(maxSweepFraction: 1)
     private let scoreRingNode = RingGaugeNode(maxSweepFraction: 1)
     private let healthIconLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
     private let healthCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let healthValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let scoreIconLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
     private let latestJudgmentLabel = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let centerComboLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let scoreCaptionLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let scoreValueLabel = SKLabelNode(fontNamed: "Menlo-Bold")
     private let scoreComboLabel = SKLabelNode(fontNamed: "Menlo-Bold")
@@ -1274,6 +1321,14 @@ final class GameScene: SKScene, @unchecked Sendable {
         latestJudgmentLabel.alpha = 0
         latestJudgmentLabel.zPosition = 12
 
+        centerComboLabel.text = "0"
+        centerComboLabel.fontSize = 34
+        centerComboLabel.fontColor = SKColor(white: 0.92, alpha: 0.92)
+        centerComboLabel.horizontalAlignmentMode = .center
+        centerComboLabel.verticalAlignmentMode = .center
+        centerComboLabel.zPosition = 12
+        centerComboLabel.isHidden = true
+
         scoreCaptionLabel.text = "SCORE"
         scoreCaptionLabel.fontSize = 9
         scoreCaptionLabel.fontColor = SKColor.white.withAlphaComponent(0.72)
@@ -1310,6 +1365,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         addChild(healthValueLabel)
         addChild(scoreIconLabel)
         addChild(latestJudgmentLabel)
+        addChild(centerComboLabel)
         addChild(scoreCaptionLabel)
         addChild(scoreValueLabel)
         addChild(scoreComboLabel)
@@ -1554,18 +1610,18 @@ final class GameScene: SKScene, @unchecked Sendable {
         }
 
         let receptorRect = CGRect(
-            x: -laneWidth * 0.31,
-            y: -14,
-            width: laneWidth * 0.62,
-            height: 28
+            x: -laneWidth * 0.465,
+            y: -17,
+            width: laneWidth * 0.93,
+            height: 34
         )
         let receptorPath = CGPath(
             roundedRect: receptorRect,
-            cornerWidth: 10,
-            cornerHeight: 10,
+            cornerWidth: 12,
+            cornerHeight: 12,
             transform: nil
         )
-        let glyphSize = min(max(laneWidth * 0.08, 5), 8)
+        let glyphSize = min(max(laneWidth * 0.10, 6), 10)
         let glyphPath = CGMutablePath()
         glyphPath.move(to: CGPoint(x: 0, y: glyphSize))
         glyphPath.addLine(to: CGPoint(x: glyphSize, y: 0))
@@ -1622,6 +1678,10 @@ final class GameScene: SKScene, @unchecked Sendable {
         scoreValueLabel.position = CGPoint(x: scoreCenterX, y: gaugeY - gaugeDiameter * 0.08)
         scoreComboLabel.position = CGPoint(x: scoreCenterX, y: gaugeY - gaugeDiameter * 0.29)
         latestJudgmentLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height - max(size.height * 0.06, 54))
+        centerComboLabel.position = CGPoint(
+            x: laneAreaRect.midX,
+            y: latestJudgmentLabel.position.y - 34
+        )
         gameOverLabel.position = CGPoint(x: laneAreaRect.midX, y: size.height * 0.52)
 
         for node in noteNodes {
@@ -1996,6 +2056,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         latestJudgmentTime = time
         comboPulseRemaining = 0.18
         scoreComboLabel.setScale(1.12)
+        centerComboLabel.setScale(1.12)
     }
 
     private func updateJudgmentLabel(at time: TimeInterval) {
@@ -2040,6 +2101,8 @@ final class GameScene: SKScene, @unchecked Sendable {
         let combo = judgmentEngine.combo
         if combo != lastRenderedCombo {
             scoreComboLabel.text = "\(combo)"
+            centerComboLabel.text = "\(combo)"
+            centerComboLabel.isHidden = combo == 0
             lastRenderedCombo = combo
         }
 
@@ -2061,6 +2124,7 @@ final class GameScene: SKScene, @unchecked Sendable {
         let pulse = comboPulseRemaining / 0.18
         let scale = 1 + 0.12 * CGFloat(pulse)
         scoreComboLabel.setScale(scale)
+        centerComboLabel.setScale(scale)
     }
 
     private func judgmentColor(for judgment: Judgment) -> SKColor {
